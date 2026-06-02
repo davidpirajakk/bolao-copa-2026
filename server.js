@@ -21,6 +21,12 @@ function saveDB() {
   fs.writeFileSync(DB_PATH, JSON.stringify(db), 'utf8');
 }
 
+// Garante que o diretório do banco existe
+const dbDir = path.dirname(DB_PATH);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+
 let db = loadDB();
 
 // ===== SSE =====
