@@ -1,0 +1,6 @@
+node_modules/
+bolao.db
+bolao.db-shm
+bolao.db-wal
+.env
+*.db

@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: bolao-copa-2026
+    runtime: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 18
+      - key: DB_PATH
+        value: /opt/render/project/src/bolao.db
+    disk:
+      name: bolao-db
+      mountPath: /opt/render/project/src
+      sizeGB: 1
