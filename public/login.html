@@ -7,31 +7,32 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'DM Sans',sans-serif;min-height:100vh;background:linear-gradient(135deg,#004d20 0%,#007a3d 50%,#005c2a 100%);display:flex;align-items:center;justify-content:center;padding:1rem}
-.container{width:100%;max-width:380px}
-.logo-wrap{text-align:center;margin-bottom:2rem}
-.logo{font-family:'Bebas Neue',sans-serif;font-size:42px;letter-spacing:2px;color:white;line-height:1}
-.logo span{color:#f5c518}
-.logo-sub{font-size:13px;color:rgba(255,255,255,0.65);margin-top:4px;letter-spacing:0.5px}
-.card{background:white;border-radius:20px;padding:2rem;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
-.tabs{display:flex;background:#f4f4f0;border-radius:10px;padding:4px;margin-bottom:1.75rem;gap:4px}
-.tab{flex:1;padding:9px;border:none;border-radius:8px;background:none;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;color:#666;cursor:pointer;transition:all 0.15s}
-.tab.active{background:white;color:#007a3d;font-weight:600;box-shadow:0 1px 4px rgba(0,0,0,0.12)}
-.form-group{margin-bottom:1.1rem}
-label{display:block;font-size:13px;font-weight:500;color:#444;margin-bottom:5px}
-input[type=text],input[type=password]{width:100%;padding:11px 14px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:15px;font-family:'DM Sans',sans-serif;color:#1a1a1a;background:#fafafa;transition:border-color 0.15s}
-input:focus{outline:none;border-color:#007a3d;background:white}
-.btn{width:100%;padding:13px;background:#007a3d;color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;transition:background 0.15s;margin-top:0.25rem}
-.btn:hover{background:#005c2a}
-.btn:disabled{opacity:0.6;cursor:not-allowed}
-.msg{font-size:13px;padding:10px 14px;border-radius:8px;margin-top:1rem;display:none}
-.msg.err{background:#fce8e8;color:#c0392b;display:block}
-.msg.ok{background:#e8f7ef;color:#007a3d;display:block}
-.divider{text-align:center;color:#aaa;font-size:12px;margin:1.25rem 0;position:relative}
-.divider::before,.divider::after{content:'';position:absolute;top:50%;width:40%;height:1px;background:#e0e0e0}
-.divider::before{left:0}.divider::after{right:0}
-.ball{font-size:60px;opacity:0.07;position:fixed;pointer-events:none;user-select:none}
-.ball-1{top:5%;left:8%}.ball-2{bottom:10%;right:6%;font-size:80px}.ball-3{top:45%;right:3%;font-size:40px}
+body{font-family:'DM Sans',sans-serif;min-height:100vh;background:linear-gradient(160deg,#003d1a 0%,#006b35 45%,#004d22 100%);display:flex;align-items:center;justify-content:center;padding:1rem;position:relative;overflow:hidden}
+body::before{content:'';position:fixed;inset:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='30' cy='30' r='2' fill='white' fill-opacity='0.03'/%3E%3C/svg%3E");pointer-events:none}
+.container{width:100%;max-width:390px;position:relative;z-index:1}
+.logo-wrap{text-align:center;margin-bottom:2.25rem}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:46px;letter-spacing:2px;color:white;line-height:1;text-shadow:0 4px 20px rgba(0,0,0,0.3)}
+.logo span{color:#f5c518;text-shadow:0 2px 12px rgba(245,197,24,0.4)}
+.logo-sub{font-size:12.5px;color:rgba(255,255,255,0.55);margin-top:6px;letter-spacing:0.8px;text-transform:uppercase}
+.card{background:white;border-radius:24px;padding:2.25rem 2rem;box-shadow:0 32px 80px rgba(0,0,0,0.35),0 0 0 1px rgba(255,255,255,0.05)}
+.tabs{display:flex;background:#f3f4f6;border-radius:12px;padding:4px;margin-bottom:2rem;gap:3px}
+.tab{flex:1;padding:10px;border:none;border-radius:9px;background:none;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;color:#6b7280;cursor:pointer;transition:all 0.18s}
+.tab.active{background:white;color:#006b35;font-weight:600;box-shadow:0 1px 6px rgba(0,0,0,0.1)}
+.form-group{margin-bottom:1.15rem}
+label{display:block;font-size:12.5px;font-weight:600;color:#374151;margin-bottom:6px;letter-spacing:0.2px;text-transform:uppercase}
+input[type=text],input[type=password]{width:100%;padding:12px 15px;border:1.5px solid #e5e7eb;border-radius:12px;font-size:15px;font-family:'DM Sans',sans-serif;color:#111827;background:#f9fafb;transition:all 0.18s}
+input:focus{outline:none;border-color:#006b35;background:white;box-shadow:0 0 0 3px rgba(0,107,53,0.1)}
+.btn{width:100%;padding:14px;background:linear-gradient(135deg,#004d22,#007a3d);color:white;border:none;border-radius:12px;font-size:15px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;transition:opacity 0.15s;margin-top:0.4rem;box-shadow:0 4px 14px rgba(0,107,53,0.35);letter-spacing:0.2px}
+.btn:hover{opacity:0.9}
+.btn:disabled{opacity:0.55;cursor:not-allowed}
+.msg{font-size:13px;padding:11px 14px;border-radius:10px;margin-top:1rem;display:none;font-weight:500}
+.msg.err{background:#fee2e2;color:#991b1b;display:block}
+.msg.ok{background:#dcfce7;color:#166534;display:block}
+.ball{position:fixed;pointer-events:none;user-select:none;opacity:0.06;font-size:80px;animation:float 8s ease-in-out infinite}
+.ball-1{top:8%;left:5%;animation-delay:0s}
+.ball-2{bottom:12%;right:5%;font-size:110px;animation-delay:-3s}
+.ball-3{top:50%;right:8%;font-size:50px;animation-delay:-6s}
+@keyframes float{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-20px) rotate(10deg)}}
 </style>
 </head>
 <body>
