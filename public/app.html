@@ -568,10 +568,15 @@ function renderRanking() {
   let h = '';
   sorted.forEach((p, i) => {
     const isCurrent = p.id === currentPlayer;
+    const campPick = (state.campeoes || {})[String(p.id)];
+    const campCode = campPick ? FLAG_CODES[campPick] : null;
+    const avatarHtml = campCode
+      ? `<div class="avatar" style="overflow:hidden;padding:0"><img src="https://flagcdn.com/48x36/${campCode}.png" alt="${campPick}" title="Aposta: ${campPick}" style="width:100%;height:100%;object-fit:cover"></div>`
+      : `<div class="avatar" style="${avatarStyle(p.idx)}">${initials(p.nome)}</div>`;
     h += `<div class="rank-row" style="${isCurrent ? 'background:#f0faf5;border-radius:8px;' : ''}">
       <div class="rank-pos ${pc[i] || ''}">${i < 3 ? medals[i] : i + 1}</div>
       <div class="rank-info">
-        <div class="avatar" style="${avatarStyle(p.idx)}">${initials(p.nome)}</div>
+        ${avatarHtml}
         <div>
           <div class="rank-name">${p.nome}${isCurrent ? ' <span style="font-size:10px;background:#007a3d;color:white;padding:1px 6px;border-radius:4px;vertical-align:middle">você</span>' : ''}</div>
           <div class="rank-sub">${p.ex} exatos · ${p.vit} vencedores</div>
