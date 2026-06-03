@@ -1,32 +1,111 @@
 const express = require('express');
-const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { Pool } = require('pg');
 
 const app = express();
 app.use(express.json());
 
-// ===== STORAGE =====
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'bolao.json');
+// ===== DATABASE =====
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+});
 
-function loadDB() {
+async function initDB() {
+  const client = await pool.connect();
   try {
-    return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
-  } catch {
-    return { users: [], nextUserId: 1, players: [], nextId: 1, palpites: {}, resultados: {}, liveStatus: {}, apiKey: '' };
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username TEXT NOT NULL,
+        username_lower TEXT NOT NULL UNIQUE,
+        hash TEXT NOT NULL,
+        salt TEXT NOT NULL,
+        player_id INTEGER NOT NULL
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS players (
+        id SERIAL PRIMARY KEY,
+        nome TEXT NOT NULL
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS palpites (
+        player_id INTEGER NOT NULL,
+        jogo_id INTEGER NOT NULL,
+        g1 INTEGER NOT NULL,
+        g2 INTEGER NOT NULL,
+        PRIMARY KEY (player_id, jogo_id)
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS resultados (
+        jogo_id INTEGER PRIMARY KEY,
+        g1 INTEGER NOT NULL,
+        g2 INTEGER NOT NULL,
+        overtime BOOLEAN DEFAULT FALSE,
+        penalties BOOLEAN DEFAULT FALSE
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS live_status (
+        jogo_id INTEGER PRIMARY KEY,
+        status TEXT NOT NULL
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    `);
+    console.log('✅ Banco de dados inicializado');
+  } finally {
+    client.release();
   }
 }
 
-function saveDB() {
-  fs.writeFileSync(DB_PATH, JSON.stringify(db), 'utf8');
+async function getState() {
+  const [playersR, palpitesR, resultadosR, liveR, settingsR] = await Promise.all([
+    pool.query('SELECT id, nome FROM players ORDER BY id'),
+    pool.query('SELECT player_id, jogo_id, g1, g2 FROM palpites'),
+    pool.query('SELECT jogo_id, g1, g2, overtime, penalties FROM resultados'),
+    pool.query('SELECT jogo_id, status FROM live_status'),
+    pool.query("SELECT value FROM settings WHERE key = 'api_key'"),
+  ]);
+
+  const palpites = {};
+  for (const row of palpitesR.rows) {
+    const pid = String(row.player_id);
+    if (!palpites[pid]) palpites[pid] = {};
+    palpites[pid][String(row.jogo_id)] = { g1: row.g1, g2: row.g2 };
+  }
+
+  const resultados = {};
+  for (const row of resultadosR.rows) {
+    resultados[String(row.jogo_id)] = { g1: row.g1, g2: row.g2, overtime: row.overtime, penalties: row.penalties };
+  }
+
+  const liveStatus = {};
+  for (const row of liveR.rows) {
+    liveStatus[String(row.jogo_id)] = row.status;
+  }
+
+  return {
+    players: playersR.rows,
+    palpites,
+    resultados,
+    liveStatus,
+    hasApiKey: settingsR.rows.length > 0 && !!settingsR.rows[0].value,
+  };
 }
 
-const dbDir = path.dirname(DB_PATH);
-if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
-
-let db = loadDB();
-// Garante campos novos em DBs antigos
-if (!db.users) { db.users = []; db.nextUserId = 1; }
+async function getApiKey() {
+  const r = await pool.query("SELECT value FROM settings WHERE key = 'api_key'");
+  return r.rows.length ? r.rows[0].value : null;
+}
 
 // ===== AUTH =====
 const SESSION_SECRET = process.env.SESSION_SECRET || (() => {
@@ -78,72 +157,103 @@ function parseCookies(req) {
   return cookies;
 }
 
-function getAuthUser(req) {
+async function getAuthUser(req) {
   const token = parseCookies(req).bolao_session;
   const userId = verifyToken(token);
   if (!userId) return null;
-  return db.users.find(u => u.id === userId) || null;
+  const r = await pool.query('SELECT id, username, player_id FROM users WHERE id = $1', [userId]);
+  if (!r.rows.length) return null;
+  const u = r.rows[0];
+  return { id: u.id, username: u.username, playerId: u.player_id };
 }
 
 function requireAuth(req, res, next) {
-  req.user = getAuthUser(req);
-  if (!req.user) return res.redirect('/');
-  next();
+  getAuthUser(req).then(user => {
+    if (!user) return res.redirect('/');
+    req.user = user;
+    next();
+  }).catch(() => res.redirect('/'));
 }
 
 const COOKIE_OPTS = { httpOnly: true, sameSite: 'lax', maxAge: 30 * 24 * 60 * 60 * 1000 };
 
+// ===== SSE =====
+const clients = new Set();
+
+async function broadcast() {
+  if (clients.size === 0) return;
+  try {
+    const state = await getState();
+    const msg = `data: ${JSON.stringify(state)}\n\n`;
+    clients.forEach(res => {
+      try { res.write(msg); } catch (_) { clients.delete(res); }
+    });
+  } catch (e) {
+    console.error('[broadcast] erro:', e.message);
+  }
+}
+
 // ===== STATIC =====
-// Login page (pública)
-app.get('/', (req, res) => {
-  if (getAuthUser(req)) return res.redirect('/app');
+app.get('/', async (req, res) => {
+  const user = await getAuthUser(req);
+  if (user) return res.redirect('/app');
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-// App principal (requer auth)
 app.get('/app', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'app.html'));
 });
 
-// Outros assets estáticos (CSS, JS, imagens)
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ===== AUTH ROUTES =====
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   const username = (req.body.username || '').trim().substring(0, 30);
   const password = req.body.password || '';
 
   if (username.length < 2) return res.status(400).json({ error: 'Nome muito curto (mínimo 2 caracteres)' });
   if (password.length < 4) return res.status(400).json({ error: 'Senha muito curta (mínimo 4 caracteres)' });
-  if (db.users.find(u => u.username.toLowerCase() === username.toLowerCase())) {
-    return res.status(400).json({ error: 'Este nome já está sendo usado' });
-  }
+
+  const existing = await pool.query('SELECT id FROM users WHERE username_lower = $1', [username.toLowerCase()]);
+  if (existing.rows.length) return res.status(400).json({ error: 'Este nome já está sendo usado' });
 
   const { hash, salt } = hashPassword(password);
-  const player = { id: db.nextId++, nome: username };
-  db.players.push(player);
-  const user = { id: db.nextUserId++, username, hash, salt, playerId: player.id };
-  db.users.push(user);
-  saveDB();
-  broadcast();
-
-  const token = createToken(user.id);
-  res.cookie('bolao_session', token, COOKIE_OPTS);
-  res.json({ ok: true, username, playerId: player.id });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const playerR = await client.query('INSERT INTO players (nome) VALUES ($1) RETURNING id', [username]);
+    const playerId = playerR.rows[0].id;
+    const userR = await client.query(
+      'INSERT INTO users (username, username_lower, hash, salt, player_id) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [username, username.toLowerCase(), hash, salt, playerId]
+    );
+    await client.query('COMMIT');
+    const token = createToken(userR.rows[0].id);
+    res.cookie('bolao_session', token, COOKIE_OPTS);
+    broadcast();
+    res.json({ ok: true, username, playerId });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('[register] erro:', e.message);
+    res.status(500).json({ error: 'Erro ao criar conta' });
+  } finally {
+    client.release();
+  }
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const username = (req.body.username || '').trim();
   const password = req.body.password || '';
 
-  const user = db.users.find(u => u.username.toLowerCase() === username.toLowerCase());
+  const r = await pool.query('SELECT id, username, hash, salt, player_id FROM users WHERE username_lower = $1', [username.toLowerCase()]);
+  const user = r.rows[0];
   if (!user || !verifyPassword(password, user.hash, user.salt)) {
     return res.status(401).json({ error: 'Usuário ou senha incorretos' });
   }
 
   const token = createToken(user.id);
   res.cookie('bolao_session', token, COOKIE_OPTS);
-  res.json({ ok: true, username: user.username, playerId: user.playerId });
+  res.json({ ok: true, username: user.username, playerId: user.player_id });
 });
 
 app.post('/api/auth/logout', (req, res) => {
@@ -151,43 +261,26 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/auth/me', (req, res) => {
-  const user = getAuthUser(req);
+app.get('/api/auth/me', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Não autenticado' });
   res.json({ id: user.id, username: user.username, playerId: user.playerId });
 });
 
-// ===== SSE =====
-const clients = new Set();
-
-function getState() {
-  return {
-    players: db.players,
-    palpites: db.palpites,
-    resultados: db.resultados,
-    liveStatus: db.liveStatus,
-    hasApiKey: !!db.apiKey,
-  };
-}
-
-function broadcast() {
-  const msg = `data: ${JSON.stringify(getState())}\n\n`;
-  clients.forEach(res => {
-    try { res.write(msg); } catch (_) { clients.delete(res); }
-  });
-}
-
 // ===== API ROUTES =====
-app.get('/api/state', (req, res) => res.json(getState()));
+app.get('/api/state', async (req, res) => res.json(await getState()));
 
-app.get('/api/events', (req, res) => {
+app.get('/api/events', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
   clients.add(res);
-  try { res.write(`data: ${JSON.stringify(getState())}\n\n`); } catch (_) {}
+  try {
+    const state = await getState();
+    res.write(`data: ${JSON.stringify(state)}\n\n`);
+  } catch (_) {}
 
   const hb = setInterval(() => {
     try { res.write(': ping\n\n'); } catch (_) { clearInterval(hb); clients.delete(res); }
@@ -196,36 +289,29 @@ app.get('/api/events', (req, res) => {
   req.on('close', () => { clearInterval(hb); clients.delete(res); });
 });
 
-app.post('/api/players', (req, res) => {
-  const nome = (req.body.nome || '').trim().substring(0, 30);
-  if (!nome) return res.status(400).json({ error: 'Nome obrigatório' });
-  const player = { id: db.nextId++, nome };
-  db.players.push(player);
-  saveDB();
-  broadcast();
-  res.json(player);
-});
-
-app.put('/api/palpites/:playerId/:jogoId', (req, res) => {
-  const playerId = String(req.params.playerId);
-  const jogoId = String(req.params.jogoId);
+app.put('/api/palpites/:playerId/:jogoId', async (req, res) => {
+  const playerId = parseInt(req.params.playerId);
+  const jogoId = parseInt(req.params.jogoId);
   const g1 = parseInt(req.body.g1);
   const g2 = parseInt(req.body.g2);
 
   if (isNaN(g1) || isNaN(g2) || g1 < 0 || g2 < 0 || g1 > 20 || g2 > 20)
     return res.status(400).json({ error: 'Placar inválido' });
-  if (db.resultados[jogoId])
-    return res.status(400).json({ error: 'Jogo já encerrado' });
 
-  if (!db.palpites[playerId]) db.palpites[playerId] = {};
-  db.palpites[playerId][jogoId] = { g1, g2 };
-  saveDB();
+  const hasResult = await pool.query('SELECT 1 FROM resultados WHERE jogo_id = $1', [jogoId]);
+  if (hasResult.rows.length) return res.status(400).json({ error: 'Jogo já encerrado' });
+
+  await pool.query(
+    `INSERT INTO palpites (player_id, jogo_id, g1, g2) VALUES ($1, $2, $3, $4)
+     ON CONFLICT (player_id, jogo_id) DO UPDATE SET g1 = $3, g2 = $4`,
+    [playerId, jogoId, g1, g2]
+  );
   broadcast();
   res.json({ ok: true });
 });
 
-app.put('/api/results/:jogoId', (req, res) => {
-  const jogoId = String(req.params.jogoId);
+app.put('/api/results/:jogoId', async (req, res) => {
+  const jogoId = parseInt(req.params.jogoId);
   const g1 = parseInt(req.body.g1);
   const g2 = parseInt(req.body.g2);
   const overtime = !!req.body.overtime;
@@ -234,24 +320,28 @@ app.put('/api/results/:jogoId', (req, res) => {
   if (isNaN(g1) || isNaN(g2) || g1 < 0 || g2 < 0 || g1 > 20 || g2 > 20)
     return res.status(400).json({ error: 'Placar inválido' });
 
-  db.resultados[jogoId] = { g1, g2, overtime, penalties };
-  saveDB();
+  await pool.query(
+    `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties) VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, overtime = $4, penalties = $5`,
+    [jogoId, g1, g2, overtime, penalties]
+  );
   broadcast();
   res.json({ ok: true });
 });
 
-app.delete('/api/results/:jogoId', (req, res) => {
-  delete db.resultados[String(req.params.jogoId)];
-  saveDB();
+app.delete('/api/results/:jogoId', async (req, res) => {
+  await pool.query('DELETE FROM resultados WHERE jogo_id = $1', [parseInt(req.params.jogoId)]);
   broadcast();
   res.json({ ok: true });
 });
 
-app.put('/api/settings/apikey', (req, res) => {
+app.put('/api/settings/apikey', async (req, res) => {
   const key = (req.body.key || '').trim();
   if (!key) return res.status(400).json({ error: 'Chave inválida' });
-  db.apiKey = key;
-  saveDB();
+  await pool.query(
+    "INSERT INTO settings (key, value) VALUES ('api_key', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+    [key]
+  );
   res.json({ ok: true });
 });
 
@@ -296,37 +386,51 @@ const JOGOS_MAP = {
 };
 
 async function doSync() {
-  if (!db.apiKey) return 0;
+  const apiKey = await getApiKey();
+  if (!apiKey) return 0;
+
   const apiRes = await fetch('https://api.football-data.org/v4/competitions/WC/matches?season=2026', {
-    headers: { 'X-Auth-Token': db.apiKey }
+    headers: { 'X-Auth-Token': apiKey }
   });
   if (!apiRes.ok) return 0;
   const data = await apiRes.json();
+
   let updated = 0;
   for (const m of (data.matches || [])) {
     const t1 = API_NAME_MAP[m.homeTeam?.name] || m.homeTeam?.name;
     const t2 = API_NAME_MAP[m.awayTeam?.name] || m.awayTeam?.name;
-    const jogoId = String(JOGOS_MAP[`${t1}|${t2}`]);
-    if (!jogoId || jogoId === 'undefined') continue;
-    db.liveStatus[jogoId] = m.status;
-    if (['FINISHED','IN_PLAY','PAUSED'].includes(m.status) && m.score?.fullTime) {
+    const jogoId = JOGOS_MAP[`${t1}|${t2}`];
+    if (!jogoId) continue;
+
+    await pool.query(
+      'INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2',
+      [jogoId, m.status]
+    );
+
+    if (['FINISHED', 'IN_PLAY', 'PAUSED'].includes(m.status) && m.score?.fullTime) {
       const g1 = m.score.fullTime.home;
       const g2 = m.score.fullTime.away;
       if (g1 != null && g2 != null) {
-        db.resultados[jogoId] = { g1, g2, overtime: m.score.extraTime != null, penalties: m.score.penalties != null };
+        await pool.query(
+          `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties) VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, overtime = $4, penalties = $5`,
+          [jogoId, g1, g2, m.score.extraTime != null, m.score.penalties != null]
+        );
         updated++;
       }
     }
   }
-  if (updated > 0) { saveDB(); broadcast(); }
+
+  if (updated > 0) broadcast();
   return updated;
 }
 
 app.post('/api/sync', async (req, res) => {
-  if (!db.apiKey) return res.status(400).json({ error: 'API key não configurada' });
+  const apiKey = await getApiKey();
+  if (!apiKey) return res.status(400).json({ error: 'API key não configurada' });
   try {
     const apiRes = await fetch('https://api.football-data.org/v4/competitions/WC/matches?season=2026', {
-      headers: { 'X-Auth-Token': db.apiKey }
+      headers: { 'X-Auth-Token': apiKey }
     });
     if (!apiRes.ok) {
       const msg = apiRes.status === 403 || apiRes.status === 401
@@ -339,19 +443,28 @@ app.post('/api/sync', async (req, res) => {
     for (const m of (data.matches || [])) {
       const t1 = API_NAME_MAP[m.homeTeam?.name] || m.homeTeam?.name;
       const t2 = API_NAME_MAP[m.awayTeam?.name] || m.awayTeam?.name;
-      const jogoId = String(JOGOS_MAP[`${t1}|${t2}`]);
-      if (!jogoId || jogoId === 'undefined') continue;
-      db.liveStatus[jogoId] = m.status;
-      if (['FINISHED','IN_PLAY','PAUSED'].includes(m.status) && m.score?.fullTime) {
+      const jogoId = JOGOS_MAP[`${t1}|${t2}`];
+      if (!jogoId) continue;
+
+      await pool.query(
+        'INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2',
+        [jogoId, m.status]
+      );
+
+      if (['FINISHED', 'IN_PLAY', 'PAUSED'].includes(m.status) && m.score?.fullTime) {
         const g1 = m.score.fullTime.home;
         const g2 = m.score.fullTime.away;
         if (g1 != null && g2 != null) {
-          db.resultados[jogoId] = { g1, g2, overtime: m.score.extraTime != null, penalties: m.score.penalties != null };
+          await pool.query(
+            `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties) VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, overtime = $4, penalties = $5`,
+            [jogoId, g1, g2, m.score.extraTime != null, m.score.penalties != null]
+          );
           updated++;
         }
       }
     }
-    saveDB(); broadcast();
+    broadcast();
     res.json({ ok: true, updated });
   } catch (e) {
     res.status(500).json({ error: 'Erro de conexão: ' + e.message });
@@ -372,9 +485,16 @@ async function autoSync() {
 const PORT = process.env.PORT || 3000;
 const SYNC_INTERVAL_MS = parseInt(process.env.SYNC_INTERVAL_MS) || 5 * 60 * 1000;
 
-app.listen(PORT, () => {
-  console.log(`✅ Bolão rodando em http://localhost:${PORT}`);
-  autoSync();
-  setInterval(autoSync, SYNC_INTERVAL_MS);
-  console.log(`🔄 Auto-sync a cada ${SYNC_INTERVAL_MS / 60000} min`);
-});
+initDB()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`✅ Bolão rodando em http://localhost:${PORT}`);
+      autoSync();
+      setInterval(autoSync, SYNC_INTERVAL_MS);
+      console.log(`🔄 Auto-sync a cada ${SYNC_INTERVAL_MS / 60000} min`);
+    });
+  })
+  .catch(e => {
+    console.error('❌ Falha ao conectar ao banco de dados:', e.message);
+    process.exit(1);
+  });
