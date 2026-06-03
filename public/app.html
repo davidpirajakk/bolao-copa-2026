@@ -138,6 +138,16 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
 .conn-dot{width:8px;height:8px;border-radius:50%;background:#d1d5db;display:inline-block;margin-right:4px}
 .conn-dot.ok{background:#00a651}.conn-dot.err{background:#e63946}
 
+/* CAMPEÃO */
+.camp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:1rem}
+.camp-btn{display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 8px;border:2px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer;transition:all 0.18s;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;color:var(--text);text-align:center;line-height:1.3}
+.camp-btn:hover{border-color:var(--green);background:var(--green-light);transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.camp-btn img{width:48px;height:36px;object-fit:cover;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,0.15)}
+.camp-picked{border-color:var(--green)!important;background:var(--green-light)!important;box-shadow:0 0 0 3px rgba(0,166,81,0.2)}
+.camp-picks-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.camp-pick-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--radius-sm);background:var(--surface);border:1px solid var(--border)}
+.camp-pick-row.mine{background:#f0faf5;border-color:var(--green)}
+
 @media(max-width:500px){
   .ranking-header,.rank-row{grid-template-columns:32px 1fr 42px 42px 50px;font-size:12px;gap:5px}
   .hero h1{font-size:26px}.hero{padding:1.25rem}
@@ -171,6 +181,7 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
     <button class="nav-btn" onclick="switchTab('palpites',this)">✏️ Palpites</button>
     <button class="nav-btn" onclick="switchTab('jogos',this)">📅 Jogos</button>
     <button class="nav-btn" id="adminTab" onclick="switchTab('admin',this)">⚙️ Admin</button>
+    <button class="nav-btn" id="campeaoTab" onclick="switchTab('campeao',this)">🏆 Campeão</button>
     <button class="nav-btn" onclick="switchTab('regras',this)">📋 Regras</button>
   </div>
 </nav>
@@ -214,6 +225,8 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
     </div>
     <div id="adminList"></div>
   </div>
+
+  <div id="sec-campeao" class="section"><div id="campeaoContent"></div></div>
 
   <div id="sec-regras" class="section">
     <div class="card">
@@ -403,10 +416,11 @@ function isGameLocked(j) {
 }
 
 // ===== STATE =====
-let state = { players: [], palpites: {}, resultados: {}, liveStatus: {}, hasApiKey: false };
+let state = { players: [], palpites: {}, resultados: {}, liveStatus: {}, campeoes: {}, hasApiKey: false };
 let currentPlayer = null;
 let currentUsername = '';
 let currentIsAdmin = false;
+let currentCampeao = null; // user's own pick (irreversible once set)
 
 // ===== AUTH =====
 async function loadCurrentUser() {
@@ -417,9 +431,14 @@ async function loadCurrentUser() {
     currentPlayer = data.playerId;
     currentUsername = data.username;
     currentIsAdmin = data.isAdmin || false;
+    currentCampeao = data.campeao || null;
     document.getElementById('playerBadgeText').textContent = currentUsername;
     if (!currentIsAdmin) {
       document.getElementById('adminTab').style.display = 'none';
+    }
+    // Show dot on campeão tab if user hasn't picked yet
+    if (!currentCampeao) {
+      document.getElementById('campeaoTab').textContent = '🏆 Campeão 🔴';
     }
   } catch {
     window.location.href = '/';
@@ -445,6 +464,7 @@ function connectSSE() {
 
     renderRanking();
     renderJogos();
+    renderCampeao();
     if (!focusedInPalpites) renderPalpites();
     if (!focusedInAdmin) renderAdmin();
   };
@@ -758,6 +778,116 @@ function showApiStatus(msg, type) {
   el.className = 'api-status ' + type;
 }
 
+// ===== CAMPEÃO =====
+const SELECOES = [
+  'Argentina','Alemanha','Austrália','Arábia Saudita','Áustria','Bélgica',
+  'Bósnia-Herz.','Brasil','Canadá','Cabo Verde','Colômbia','Congo (RD)',
+  'Coreia do Sul','Costa do Marfim','Catar','Croácia','Curaçao','Egito',
+  'Equador','Escócia','Espanha','Estados Unidos','França','Gana',
+  'Haiti','Holanda','Inglaterra','Irã','Iraque','Japão',
+  'Jordânia','Marrocos','México','Nova Zelândia','Noruega','Panamá',
+  'Paraguai','Portugal','Rep. Tcheca','Senegal','Suécia','Suíça',
+  'Tunísia','Turquia','Uruguai','Uzbequistão','África do Sul','Argélia',
+];
+
+function renderCampeao() {
+  const el = document.getElementById('campeaoContent');
+  if (!el) return;
+  const myPick = currentCampeao;
+
+  // Build picks list from state
+  const picksList = state.players.map((p, i) => {
+    const pick = (state.campeoes || {})[String(p.id)];
+    return { player: p, pick, idx: i };
+  }).filter(x => x.pick);
+
+  if (!myPick) {
+    // Selection UI
+    let grid = '';
+    SELECOES.forEach(sel => {
+      const code = FLAG_CODES[sel];
+      const imgUrl = code ? `https://flagcdn.com/48x36/${code}.png` : '';
+      grid += `<button class="camp-btn" onclick="pickCampeao('${sel.replace(/'/g,"\\'")}')">
+        ${imgUrl ? `<img src="${imgUrl}" alt="${sel}">` : '<span style="font-size:30px">⚽</span>'}
+        <span>${sel}</span>
+      </button>`;
+    });
+
+    let picksHtml = '';
+    if (picksList.length) {
+      picksHtml = `<div class="card" style="margin-top:1.5rem">
+        <b style="font-size:14px">🏟️ Apostas confirmadas (${picksList.length}/${state.players.length})</b>
+        <div class="camp-picks-list" style="margin-top:10px">
+          ${picksList.map(x => {
+            const code = FLAG_CODES[x.pick];
+            return `<div class="camp-pick-row">
+              ${code ? `<img src="https://flagcdn.com/32x24/${code}.png" style="border-radius:3px;flex-shrink:0">` : ''}
+              <span style="font-weight:600;font-size:13px">${x.pick}</span>
+              <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">${x.player.nome}</span>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }
+
+    el.innerHTML = `
+      <div style="background:linear-gradient(135deg,#004d22,#006b35);border-radius:var(--radius);padding:1.5rem;color:white;margin-bottom:1rem;text-align:center">
+        <div style="font-size:36px;margin-bottom:8px">🏆</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:1px">Quem vai ser Campeão?</div>
+        <div style="font-size:13px;opacity:0.75;margin-top:6px">Clique na seleção para confirmar sua aposta.<br><b>Atenção: a escolha não pode ser desfeita.</b></div>
+      </div>
+      <div class="camp-grid">${grid}</div>
+      ${picksHtml}`;
+    return;
+  }
+
+  // User already picked
+  const code = FLAG_CODES[myPick];
+  const picksHtml = picksList.length ? `
+    <div class="camp-picks-list">
+      ${picksList.map(x => {
+        const c = FLAG_CODES[x.pick];
+        const isMine = x.player.id === currentPlayer;
+        return `<div class="camp-pick-row ${isMine ? 'mine' : ''}">
+          ${c ? `<img src="https://flagcdn.com/32x24/${c}.png" style="border-radius:3px;flex-shrink:0">` : ''}
+          <span style="font-weight:600;font-size:13px">${x.pick}</span>
+          <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">${x.player.nome}${isMine ? ' <span style="background:#007a3d;color:white;padding:1px 6px;border-radius:4px;font-size:10px">você</span>' : ''}</span>
+        </div>`;
+      }).join('')}
+    </div>` : '<div class="empty">Nenhum participante apostou ainda.</div>';
+
+  el.innerHTML = `
+    <div style="background:linear-gradient(135deg,#004d22,#006b35);border-radius:var(--radius);padding:1.5rem;color:white;text-align:center;margin-bottom:1rem">
+      <div style="font-size:13px;opacity:0.7;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px">Sua aposta</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:14px">
+        ${code ? `<img src="https://flagcdn.com/64x48/${code}.png" style="border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.3)">` : ''}
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:1px">${myPick}</div>
+      </div>
+      <div style="font-size:12px;opacity:0.6;margin-top:8px">🔒 Aposta confirmada — não pode ser alterada</div>
+    </div>
+    <div class="card">
+      <b style="font-size:14px;display:block;margin-bottom:12px">🏟️ Apostas de todos (${picksList.length}/${state.players.length})</b>
+      ${picksHtml}
+    </div>`;
+}
+
+async function pickCampeao(sel) {
+  if (!confirm(`Confirmar aposta em "${sel}"?\n\nAtenção: esta escolha não pode ser desfeita.`)) return;
+  const res = await fetch('/api/campeao', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ campeao: sel })
+  });
+  const data = await res.json();
+  if (res.ok) {
+    currentCampeao = sel;
+    document.getElementById('campeaoTab').textContent = '🏆 Campeão';
+    renderCampeao();
+  } else {
+    alert(data.error || 'Erro ao salvar aposta.');
+  }
+}
+
 // ===== NAV =====
 function switchTab(id, btn) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -768,6 +898,7 @@ function switchTab(id, btn) {
   if (id === 'admin') renderAdmin();
   if (id === 'jogos') renderJogos();
   if (id === 'ranking') renderRanking();
+  if (id === 'campeao') renderCampeao();
 }
 
 // ===== INIT =====

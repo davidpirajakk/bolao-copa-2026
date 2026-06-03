@@ -22,9 +22,12 @@ async function initDB() {
         username_lower TEXT NOT NULL UNIQUE,
         hash TEXT NOT NULL,
         salt TEXT NOT NULL,
-        player_id INTEGER NOT NULL
+        player_id INTEGER NOT NULL,
+        campeao TEXT
       )
     `);
+    // Migration: add campeao column if table already exists without it
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS campeao TEXT`);
     await client.query(`
       CREATE TABLE IF NOT EXISTS players (
         id SERIAL PRIMARY KEY,
@@ -93,11 +96,18 @@ async function getState() {
     liveStatus[String(row.jogo_id)] = row.status;
   }
 
+  const campeaoR = await pool.query('SELECT player_id, campeao FROM users WHERE campeao IS NOT NULL');
+  const campeoes = {};
+  for (const row of campeaoR.rows) {
+    campeoes[String(row.player_id)] = row.campeao;
+  }
+
   return {
     players: playersR.rows,
     palpites,
     resultados,
     liveStatus,
+    campeoes,
     hasApiKey: settingsR.rows.length > 0 && !!settingsR.rows[0].value,
   };
 }
@@ -274,7 +284,21 @@ app.get('/api/auth/me', async (req, res) => {
   const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Não autenticado' });
   const ADMIN = (process.env.ADMIN_USERNAME || 'david').toLowerCase();
-  res.json({ id: user.id, username: user.username, playerId: user.playerId, isAdmin: user.username.toLowerCase() === ADMIN });
+  const r = await pool.query('SELECT campeao FROM users WHERE id = $1', [user.id]);
+  const campeao = r.rows[0]?.campeao || null;
+  res.json({ id: user.id, username: user.username, playerId: user.playerId, isAdmin: user.username.toLowerCase() === ADMIN, campeao });
+});
+
+app.put('/api/campeao', async (req, res) => {
+  const user = await getAuthUser(req);
+  if (!user) return res.status(401).json({ error: 'Não autenticado' });
+  const campeao = (req.body.campeao || '').trim();
+  if (!campeao) return res.status(400).json({ error: 'Seleção inválida' });
+  const existing = await pool.query('SELECT campeao FROM users WHERE id = $1', [user.id]);
+  if (existing.rows[0]?.campeao) return res.status(400).json({ error: 'Você já fez sua aposta. Não é possível alterar.' });
+  await pool.query('UPDATE users SET campeao = $1 WHERE id = $2', [campeao, user.id]);
+  broadcast();
+  res.json({ ok: true });
 });
 
 // ===== API ROUTES =====
