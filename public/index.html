@@ -271,22 +271,26 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
 
 <script>
 // ===== BANDEIRAS =====
-const FLAGS={
-  'México':'🇲🇽','África do Sul':'🇿🇦','Coreia do Sul':'🇰🇷','Rep. Tcheca':'🇨🇿',
-  'Canadá':'🇨🇦','Bósnia-Herz.':'🇧🇦','Estados Unidos':'🇺🇸','Paraguai':'🇵🇾',
-  'Austrália':'🇦🇺','Turquia':'🇹🇷','Catar':'🇶🇦','Suíça':'🇨🇭',
-  'Brasil':'🇧🇷','Marrocos':'🇲🇦','Haiti':'🇭🇹','Escócia':'🏴󠁧󠁢󠁳󠁣󠁴󠁿',
-  'Alemanha':'🇩🇪','Curaçao':'🇨🇼','Costa do Marfim':'🇨🇮','Equador':'🇪🇨',
-  'Holanda':'🇳🇱','Japão':'🇯🇵','Suécia':'🇸🇪','Tunísia':'🇹🇳',
-  'Espanha':'🇪🇸','Cabo Verde':'🇨🇻','Arábia Saudita':'🇸🇦','Uruguai':'🇺🇾',
-  'Bélgica':'🇧🇪','Egito':'🇪🇬','Irã':'🇮🇷','Nova Zelândia':'🇳🇿',
-  'Áustria':'🇦🇹','Jordânia':'🇯🇴','França':'🇫🇷','Senegal':'🇸🇳',
-  'Iraque':'🇮🇶','Noruega':'🇳🇴','Argentina':'🇦🇷','Argélia':'🇩🇿',
-  'Portugal':'🇵🇹','Congo (RD)':'🇨🇩','Uzbequistão':'🇺🇿','Colômbia':'🇨🇴',
-  'Inglaterra':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Croácia':'🇭🇷','Gana':'🇬🇭','Panamá':'🇵🇦',
-  'A definir':'⚽'
+const FLAG_CODES={
+  'México':'mx','África do Sul':'za','Coreia do Sul':'kr','Rep. Tcheca':'cz',
+  'Canadá':'ca','Bósnia-Herz.':'ba','Estados Unidos':'us','Paraguai':'py',
+  'Austrália':'au','Turquia':'tr','Catar':'qa','Suíça':'ch',
+  'Brasil':'br','Marrocos':'ma','Haiti':'ht','Escócia':'gb-sct',
+  'Alemanha':'de','Curaçao':'cw','Costa do Marfim':'ci','Equador':'ec',
+  'Holanda':'nl','Japão':'jp','Suécia':'se','Tunísia':'tn',
+  'Espanha':'es','Cabo Verde':'cv','Arábia Saudita':'sa','Uruguai':'uy',
+  'Bélgica':'be','Egito':'eg','Irã':'ir','Nova Zelândia':'nz',
+  'Áustria':'at','Jordânia':'jo','França':'fr','Senegal':'sn',
+  'Iraque':'iq','Noruega':'no','Argentina':'ar','Argélia':'dz',
+  'Portugal':'pt','Congo (RD)':'cd','Uzbequistão':'uz','Colômbia':'co',
+  'Inglaterra':'gb-eng','Croácia':'hr','Gana':'gh','Panamá':'pa',
 };
-function flag(t){return FLAGS[t]||'🏳️'}
+function flag(t,sz){
+  const code=FLAG_CODES[t];
+  if(!code) return '<span style="font-size:18px">⚽</span>';
+  const s=sz||24;
+  return `<img src="https://flagcdn.com/${s}x${Math.round(s*0.75)}/${code}.png" alt="${t}" title="${t}" style="width:${s}px;height:${Math.round(s*0.75)}px;object-fit:cover;border-radius:2px;vertical-align:middle;display:inline-block">`;
+}
 
 // ===== JOGOS =====
 const JOGOS=[
@@ -552,12 +556,12 @@ function renderPalpites() {
     h += `<div class="palpite-card"><div class="palpite-meta">
       <span style="font-size:11px;color:var(--text-muted)">${j.data} ${j.hora}</span>${badge}</div>
       <div class="palpite-teams">
-        <span class="palpite-team"><span class="flag" style="font-size:18px">${flag(j.time1)}</span>${j.time1}</span>
+        <span class="palpite-team">${flag(j.time1,20)} ${j.time1}</span>
         <input type="number" min="0" max="20" class="score-inp" value="${v1}" placeholder="–" ${bloq ? 'disabled' : ''} onchange="savePalpite(${p.id},${j.id},0,this.value)">
         <span class="score-vs">×</span>
         <input type="number" min="0" max="20" class="score-inp" value="${v2}" placeholder="–" ${bloq ? 'disabled' : ''} onchange="savePalpite(${p.id},${j.id},1,this.value)">
-        <span class="palpite-team right"><span class="flag" style="font-size:18px">${flag(j.time2)}</span>${j.time2}</span>
-      </div>${r ? `<div class="result-line">${flag(j.time1)} ${j.time1} ${r.g1} × ${r.g2} ${j.time2} ${flag(j.time2)}</div>` : ''}</div>`;
+        <span class="palpite-team right">${flag(j.time2,20)} ${j.time2}</span>
+      </div>${r ? `<div class="result-line">${flag(j.time1,16)} ${j.time1} ${r.g1} × ${r.g2} ${j.time2} ${flag(j.time2,16)}</div>` : ''}</div>`;
   });
   el.innerHTML = h;
 }
@@ -576,9 +580,9 @@ function renderJogos() {
       <span style="font-size:11px;color:var(--text-muted);background:var(--bg);padding:2px 8px;border-radius:4px">${j.data} ${j.hora}</span>
       ${statusBadge}</div>
       <div class="jogo-teams">
-        <span class="jogo-team"><span class="flag">${flag(j.time1)}</span>${j.time1}</span>
+        <span class="jogo-team">${flag(j.time1)} ${j.time1}</span>
         <span class="jogo-score">${r ? `${r.g1} × ${r.g2}` : '– × –'}</span>
-        <span class="jogo-team right">${j.time2}<span class="flag">${flag(j.time2)}</span></span>
+        <span class="jogo-team right">${j.time2} ${flag(j.time2)}</span>
       </div></div>`;
   });
   document.getElementById('jogosList').innerHTML = h;
@@ -603,11 +607,11 @@ function renderAdmin() {
         ${r && !live ? `<span class="badge badge-green" style="margin-left:6px">✓ Salvo</span>` : ''}
       </div>
       <div class="admin-row">
-        <span class="admin-team"><span style="font-size:18px">${flag(j.time1)}</span>${j.time1}</span>
+        <span class="admin-team">${flag(j.time1,20)} ${j.time1}</span>
         <input type="number" min="0" max="20" class="score-inp" id="adm_${j.id}_0" value="${g1}" placeholder="–" style="width:44px;height:42px;font-size:20px">
         <span style="font-size:14px;color:var(--text-muted);font-weight:500">×</span>
         <input type="number" min="0" max="20" class="score-inp" id="adm_${j.id}_1" value="${g2}" placeholder="–" style="width:44px;height:42px;font-size:20px">
-        <span class="admin-team right">${j.time2}<span style="font-size:18px">${flag(j.time2)}</span></span>
+        <span class="admin-team right">${j.time2} ${flag(j.time2,20)}</span>
         <button class="btn-save" onclick="saveResult(${j.id})">Salvar</button>
       </div>
       ${isKnockout ? `<div style="display:flex;gap:16px;margin-top:10px;font-size:13px;color:var(--text-muted)">
