@@ -794,7 +794,7 @@ const SELECOES = [
   'Jordânia','Marrocos','México','Nova Zelândia','Noruega','Panamá',
   'Paraguai','Portugal','Rep. Tcheca','Senegal','Suécia','Suíça',
   'Tunísia','Turquia','Uruguai','Uzbequistão','África do Sul','Argélia',
-];
+].sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
 
 function renderCampeao() {
   const el = document.getElementById('campeaoContent');
