@@ -280,6 +280,35 @@ app.get('/api/auth/me', async (req, res) => {
 // ===== API ROUTES =====
 app.get('/api/state', async (req, res) => res.json(await getState()));
 
+// Admin: listar usuários
+app.get('/api/admin/users', requireAdmin, async (req, res) => {
+  const r = await pool.query('SELECT u.id, u.username, p.nome, p.id as player_id FROM users u JOIN players p ON p.id = u.player_id ORDER BY u.id');
+  res.json(r.rows);
+});
+
+// Admin: apagar usuário e seu player
+app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
+  const userId = parseInt(req.params.id);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const u = await client.query('SELECT player_id FROM users WHERE id = $1', [userId]);
+    if (!u.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Usuário não encontrado' }); }
+    const playerId = u.rows[0].player_id;
+    await client.query('DELETE FROM palpites WHERE player_id = $1', [playerId]);
+    await client.query('DELETE FROM users WHERE id = $1', [userId]);
+    await client.query('DELETE FROM players WHERE id = $1', [playerId]);
+    await client.query('COMMIT');
+    broadcast();
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
 app.get('/api/events', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
