@@ -380,6 +380,28 @@ const JOGOS=[
   {id:78,fase:'🏆 Grande Final',data:'19/jul',hora:'16h',time1:'A definir',time2:'A definir'},
 ];
 
+// ===== GAME TIME LOCK =====
+const MONTH_MAP={jan:1,fev:2,mar:3,abr:4,mai:5,jun:6,jul:7,ago:8,set:9,out:10,nov:11,dez:12};
+function parseGameTime(data, hora) {
+  if (!hora || hora === '—') return null;
+  const horMatch = hora.match(/^(\d+)h(\d+)?$/);
+  if (!horMatch) return null;
+  const h = parseInt(horMatch[1]);
+  const m = parseInt(horMatch[2] || '0');
+  const dataPart = data.split('–')[0];
+  const dateMatch = dataPart.match(/^(\d+)\/(\w+)$/);
+  if (!dateMatch) return null;
+  const day = parseInt(dateMatch[1]);
+  const mon = MONTH_MAP[dateMatch[2]];
+  if (!mon) return null;
+  return new Date(Date.UTC(2026, mon - 1, day, h + 3, m)); // BRT→UTC: +3h
+}
+function isGameLocked(j) {
+  const gameTime = parseGameTime(j.data, j.hora);
+  if (!gameTime) return false;
+  return Date.now() >= gameTime.getTime() - 60 * 60 * 1000;
+}
+
 // ===== STATE =====
 let state = { players: [], palpites: {}, resultados: {}, liveStatus: {}, hasApiKey: false };
 let currentPlayer = null;
@@ -558,10 +580,12 @@ function renderPalpites() {
     if (j.fase !== fa) { fa = j.fase; h += `<div class="fase-label">${j.fase}</div>`; }
     const r = state.resultados[j.id];
     const pp = pal[j.id];
-    const bloq = r != null;
+    const timeLocked = isGameLocked(j);
+    const bloq = r != null || timeLocked;
     const live = isLive(j.id);
     let badge = '';
     if (live) badge = `<span class="badge badge-live">● AO VIVO</span>`;
+    else if (timeLocked && !r) badge = `<span class="badge badge-amber">🔒 Encerrado</span>`;
     else if (r && pp != null) {
       const { pts, breakdown } = scoreGame(pp, r);
       if (pts === 0) {

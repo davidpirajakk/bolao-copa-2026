@@ -337,6 +337,8 @@ app.put('/api/palpites/:playerId/:jogoId', async (req, res) => {
   if (isNaN(g1) || isNaN(g2) || g1 < 0 || g2 < 0 || g1 > 20 || g2 > 20)
     return res.status(400).json({ error: 'Placar inválido' });
 
+  if (isGameLocked(jogoId)) return res.status(400).json({ error: 'Palpites encerrados (menos de 1h para o jogo)' });
+
   const hasResult = await pool.query('SELECT 1 FROM resultados WHERE jogo_id = $1', [jogoId]);
   if (hasResult.rows.length) return res.status(400).json({ error: 'Jogo já encerrado' });
 
@@ -383,6 +385,54 @@ app.put('/api/settings/apikey', requireAdmin, async (req, res) => {
   );
   res.json({ ok: true });
 });
+
+// ===== GAME TIME LOCK =====
+const JOGOS_TIMES = {
+  1:['11/jun','16h'],2:['11/jun','23h'],3:['12/jun','16h'],4:['12/jun','22h'],
+  5:['13/jun','01h'],6:['13/jun','16h'],7:['13/jun','19h'],8:['13/jun','22h'],
+  9:['14/jun','14h'],10:['14/jun','17h'],11:['14/jun','20h'],12:['14/jun','23h'],
+  13:['15/jun','13h'],14:['15/jun','16h'],15:['15/jun','19h'],16:['15/jun','22h'],
+  17:['16/jun','01h'],18:['16/jun','16h'],19:['16/jun','19h'],20:['16/jun','22h'],
+  21:['17/jun','14h'],22:['17/jun','17h'],23:['17/jun','20h'],24:['17/jun','23h'],
+  25:['18/jun','13h'],26:['18/jun','16h'],27:['18/jun','19h'],28:['18/jun','22h'],
+  29:['19/jun','01h'],30:['19/jun','16h'],31:['19/jun','19h'],32:['19/jun','21h30'],
+  33:['20/jun','01h'],34:['20/jun','14h'],35:['20/jun','17h'],36:['20/jun','21h'],
+  37:['21/jun','13h'],38:['21/jun','16h'],39:['21/jun','19h'],40:['21/jun','22h'],
+  41:['22/jun','00h'],42:['22/jun','14h'],43:['22/jun','18h'],44:['22/jun','21h'],
+  45:['23/jun','14h'],46:['23/jun','17h'],47:['23/jun','20h'],48:['23/jun','23h'],
+  49:['24/jun','16h'],50:['24/jun','16h'],51:['24/jun','19h'],52:['24/jun','19h'],
+  53:['24/jun','22h'],54:['24/jun','22h'],55:['25/jun','17h'],56:['25/jun','17h'],
+  57:['25/jun','20h'],58:['25/jun','20h'],59:['25/jun','23h'],60:['25/jun','23h'],
+  61:['26/jun','16h'],62:['26/jun','16h'],63:['26/jun','21h'],64:['26/jun','21h'],
+  65:['27/jun','00h'],66:['27/jun','00h'],67:['27/jun','18h'],68:['27/jun','18h'],
+  69:['27/jun','20h30'],70:['27/jun','20h30'],71:['27/jun','23h'],72:['27/jun','23h'],
+  77:['18/jul','18h'],78:['19/jul','16h'],
+};
+
+const MONTH_MAP_SRV = {jan:1,fev:2,mar:3,abr:4,mai:5,jun:6,jul:7,ago:8,set:9,out:10,nov:11,dez:12};
+function parseGameTime(data, hora) {
+  if (!hora || hora === '—') return null;
+  const horMatch = hora.match(/^(\d+)h(\d+)?$/);
+  if (!horMatch) return null;
+  const h = parseInt(horMatch[1]);
+  const m = parseInt(horMatch[2] || '0');
+  const dataPart = data.split('–')[0];
+  const dateMatch = dataPart.match(/^(\d+)\/(\w+)$/);
+  if (!dateMatch) return null;
+  const day = parseInt(dateMatch[1]);
+  const mon = MONTH_MAP_SRV[dateMatch[2]];
+  if (!mon) return null;
+  // Games are in BRT (UTC-3); convert to UTC by adding 3h
+  return new Date(Date.UTC(2026, mon - 1, day, h + 3, m));
+}
+
+function isGameLocked(jogoId) {
+  const times = JOGOS_TIMES[jogoId];
+  if (!times) return false; // knockout TBD games (73-76) are never locked by time
+  const gameTime = parseGameTime(times[0], times[1]);
+  if (!gameTime) return false;
+  return Date.now() >= gameTime.getTime() - 60 * 60 * 1000; // 1h before
+}
 
 // ===== FOOTBALL-DATA SYNC =====
 const API_NAME_MAP = {
