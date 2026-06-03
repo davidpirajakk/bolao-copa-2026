@@ -1,10 +1,10 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 
 // ===== STORAGE =====
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'bolao.json');
@@ -13,7 +13,7 @@ function loadDB() {
   try {
     return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
   } catch {
-    return { players: [], nextId: 1, palpites: {}, resultados: {}, liveStatus: {}, apiKey: '' };
+    return { users: [], nextUserId: 1, players: [], nextId: 1, palpites: {}, resultados: {}, liveStatus: {}, apiKey: '' };
   }
 }
 
@@ -21,13 +21,141 @@ function saveDB() {
   fs.writeFileSync(DB_PATH, JSON.stringify(db), 'utf8');
 }
 
-// Garante que o diretório do banco existe
 const dbDir = path.dirname(DB_PATH);
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
-}
+if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
 
 let db = loadDB();
+// Garante campos novos em DBs antigos
+if (!db.users) { db.users = []; db.nextUserId = 1; }
+
+// ===== AUTH =====
+const SESSION_SECRET = process.env.SESSION_SECRET || (() => {
+  console.warn('⚠️  SESSION_SECRET não definido — defina no Railway em Variables.');
+  return crypto.randomBytes(32).toString('hex');
+})();
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return { hash, salt };
+}
+
+function verifyPassword(password, hash, salt) {
+  try {
+    const verify = crypto.scryptSync(password, salt, 64).toString('hex');
+    return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(verify, 'hex'));
+  } catch { return false; }
+}
+
+function createToken(userId) {
+  const payload = `${userId}|${Date.now()}`;
+  const sig = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('hex');
+  return Buffer.from(`${payload}|${sig}`).toString('base64url');
+}
+
+function verifyToken(token) {
+  if (!token) return null;
+  try {
+    const decoded = Buffer.from(token, 'base64url').toString();
+    const lastPipe = decoded.lastIndexOf('|');
+    const payload = decoded.substring(0, lastPipe);
+    const sig = decoded.substring(lastPipe + 1);
+    const expected = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('hex');
+    if (sig.length !== expected.length) return null;
+    if (!crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expected, 'hex'))) return null;
+    const userId = parseInt(payload.split('|')[0]);
+    return isNaN(userId) ? null : userId;
+  } catch { return null; }
+}
+
+function parseCookies(req) {
+  const cookies = {};
+  (req.headers.cookie || '').split(';').forEach(c => {
+    const idx = c.indexOf('=');
+    if (idx < 0) return;
+    cookies[c.slice(0, idx).trim()] = decodeURIComponent(c.slice(idx + 1).trim());
+  });
+  return cookies;
+}
+
+function getAuthUser(req) {
+  const token = parseCookies(req).bolao_session;
+  const userId = verifyToken(token);
+  if (!userId) return null;
+  return db.users.find(u => u.id === userId) || null;
+}
+
+function requireAuth(req, res, next) {
+  req.user = getAuthUser(req);
+  if (!req.user) return res.redirect('/');
+  next();
+}
+
+const COOKIE_OPTS = { httpOnly: true, sameSite: 'lax', maxAge: 30 * 24 * 60 * 60 * 1000 };
+
+// ===== STATIC =====
+// Login page (pública)
+app.get('/', (req, res) => {
+  if (getAuthUser(req)) return res.redirect('/app');
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// App principal (requer auth)
+app.get('/app', requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'app.html'));
+});
+
+// Outros assets estáticos (CSS, JS, imagens)
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ===== AUTH ROUTES =====
+app.post('/api/auth/register', (req, res) => {
+  const username = (req.body.username || '').trim().substring(0, 30);
+  const password = req.body.password || '';
+
+  if (username.length < 2) return res.status(400).json({ error: 'Nome muito curto (mínimo 2 caracteres)' });
+  if (password.length < 4) return res.status(400).json({ error: 'Senha muito curta (mínimo 4 caracteres)' });
+  if (db.users.find(u => u.username.toLowerCase() === username.toLowerCase())) {
+    return res.status(400).json({ error: 'Este nome já está sendo usado' });
+  }
+
+  const { hash, salt } = hashPassword(password);
+  const player = { id: db.nextId++, nome: username };
+  db.players.push(player);
+  const user = { id: db.nextUserId++, username, hash, salt, playerId: player.id };
+  db.users.push(user);
+  saveDB();
+  broadcast();
+
+  const token = createToken(user.id);
+  res.cookie('bolao_session', token, COOKIE_OPTS);
+  res.json({ ok: true, username, playerId: player.id });
+});
+
+app.post('/api/auth/login', (req, res) => {
+  const username = (req.body.username || '').trim();
+  const password = req.body.password || '';
+
+  const user = db.users.find(u => u.username.toLowerCase() === username.toLowerCase());
+  if (!user || !verifyPassword(password, user.hash, user.salt)) {
+    return res.status(401).json({ error: 'Usuário ou senha incorretos' });
+  }
+
+  const token = createToken(user.id);
+  res.cookie('bolao_session', token, COOKIE_OPTS);
+  res.json({ ok: true, username: user.username, playerId: user.playerId });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  res.clearCookie('bolao_session');
+  res.json({ ok: true });
+});
+
+app.get('/api/auth/me', (req, res) => {
+  const user = getAuthUser(req);
+  if (!user) return res.status(401).json({ error: 'Não autenticado' });
+  res.json({ id: user.id, username: user.username, playerId: user.playerId });
+});
 
 // ===== SSE =====
 const clients = new Set();
@@ -49,8 +177,7 @@ function broadcast() {
   });
 }
 
-// ===== ROUTES =====
-
+// ===== API ROUTES =====
 app.get('/api/state', (req, res) => res.json(getState()));
 
 app.get('/api/events', (req, res) => {
@@ -85,12 +212,10 @@ app.put('/api/palpites/:playerId/:jogoId', (req, res) => {
   const g1 = parseInt(req.body.g1);
   const g2 = parseInt(req.body.g2);
 
-  if (isNaN(g1) || isNaN(g2) || g1 < 0 || g2 < 0 || g1 > 20 || g2 > 20) {
+  if (isNaN(g1) || isNaN(g2) || g1 < 0 || g2 < 0 || g1 > 20 || g2 > 20)
     return res.status(400).json({ error: 'Placar inválido' });
-  }
-  if (db.resultados[jogoId]) {
+  if (db.resultados[jogoId])
     return res.status(400).json({ error: 'Jogo já encerrado' });
-  }
 
   if (!db.palpites[playerId]) db.palpites[playerId] = {};
   db.palpites[playerId][jogoId] = { g1, g2 };
@@ -106,9 +231,8 @@ app.put('/api/results/:jogoId', (req, res) => {
   const overtime = !!req.body.overtime;
   const penalties = !!req.body.penalties;
 
-  if (isNaN(g1) || isNaN(g2) || g1 < 0 || g2 < 0 || g1 > 20 || g2 > 20) {
+  if (isNaN(g1) || isNaN(g2) || g1 < 0 || g2 < 0 || g1 > 20 || g2 > 20)
     return res.status(400).json({ error: 'Placar inválido' });
-  }
 
   db.resultados[jogoId] = { g1, g2, overtime, penalties };
   saveDB();
@@ -131,7 +255,7 @@ app.put('/api/settings/apikey', (req, res) => {
   res.json({ ok: true });
 });
 
-// Mapeamento nome football-data.org → nome no bolão
+// ===== FOOTBALL-DATA SYNC =====
 const API_NAME_MAP = {
   'Mexico':'México','South Africa':'África do Sul','South Korea':'Coreia do Sul',
   'Czech Republic':'Rep. Tcheca','Canada':'Canadá','Bosnia and Herzegovina':'Bósnia-Herz.',
@@ -171,62 +295,45 @@ const JOGOS_MAP = {
   'Colômbia|Portugal':69,'Congo (RD)|Uzbequistão':70,'Argélia|Áustria':71,'Jordânia|Argentina':72,
 };
 
+async function doSync() {
+  if (!db.apiKey) return 0;
+  const apiRes = await fetch('https://api.football-data.org/v4/competitions/WC/matches?season=2026', {
+    headers: { 'X-Auth-Token': db.apiKey }
+  });
+  if (!apiRes.ok) return 0;
+  const data = await apiRes.json();
+  let updated = 0;
+  for (const m of (data.matches || [])) {
+    const t1 = API_NAME_MAP[m.homeTeam?.name] || m.homeTeam?.name;
+    const t2 = API_NAME_MAP[m.awayTeam?.name] || m.awayTeam?.name;
+    const jogoId = String(JOGOS_MAP[`${t1}|${t2}`]);
+    if (!jogoId || jogoId === 'undefined') continue;
+    db.liveStatus[jogoId] = m.status;
+    if (['FINISHED','IN_PLAY','PAUSED'].includes(m.status) && m.score?.fullTime) {
+      const g1 = m.score.fullTime.home;
+      const g2 = m.score.fullTime.away;
+      if (g1 != null && g2 != null) {
+        db.resultados[jogoId] = { g1, g2, overtime: m.score.extraTime != null, penalties: m.score.penalties != null };
+        updated++;
+      }
+    }
+  }
+  if (updated > 0) { saveDB(); broadcast(); }
+  return updated;
+}
+
 app.post('/api/sync', async (req, res) => {
   if (!db.apiKey) return res.status(400).json({ error: 'API key não configurada' });
-
   try {
     const apiRes = await fetch('https://api.football-data.org/v4/competitions/WC/matches?season=2026', {
       headers: { 'X-Auth-Token': db.apiKey }
     });
-
     if (!apiRes.ok) {
       const msg = apiRes.status === 403 || apiRes.status === 401
         ? 'Chave inválida ou sem permissão para Copa do Mundo'
         : `Erro da API: ${apiRes.status}`;
       return res.status(apiRes.status).json({ error: msg });
     }
-
-    const data = await apiRes.json();
-    let updated = 0;
-
-    for (const m of (data.matches || [])) {
-      const t1 = API_NAME_MAP[m.homeTeam?.name] || m.homeTeam?.name;
-      const t2 = API_NAME_MAP[m.awayTeam?.name] || m.awayTeam?.name;
-      const jogoId = String(JOGOS_MAP[`${t1}|${t2}`]);
-      if (!jogoId || jogoId === 'undefined') continue;
-
-      const status = m.status;
-      db.liveStatus[jogoId] = status;
-
-      if ((status === 'FINISHED' || status === 'IN_PLAY' || status === 'PAUSED') && m.score?.fullTime) {
-        const g1 = m.score.fullTime.home;
-        const g2 = m.score.fullTime.away;
-        if (g1 != null && g2 != null) {
-          const overtime = m.score.extraTime != null;
-          const penalties = m.score.penalties != null;
-          db.resultados[jogoId] = { g1, g2, overtime, penalties };
-          updated++;
-        }
-      }
-    }
-
-    saveDB();
-    broadcast();
-    res.json({ ok: true, updated });
-  } catch (e) {
-    res.status(500).json({ error: 'Erro de conexão: ' + e.message });
-  }
-});
-
-// ===== AUTO-SYNC =====
-// Busca placares automaticamente a cada 5 min se tiver API key
-async function autoSync() {
-  if (!db.apiKey) return;
-  try {
-    const apiRes = await fetch('https://api.football-data.org/v4/competitions/WC/matches?season=2026', {
-      headers: { 'X-Auth-Token': db.apiKey }
-    });
-    if (!apiRes.ok) return;
     const data = await apiRes.json();
     let updated = 0;
     for (const m of (data.matches || [])) {
@@ -235,7 +342,7 @@ async function autoSync() {
       const jogoId = String(JOGOS_MAP[`${t1}|${t2}`]);
       if (!jogoId || jogoId === 'undefined') continue;
       db.liveStatus[jogoId] = m.status;
-      if ((['FINISHED','IN_PLAY','PAUSED'].includes(m.status)) && m.score?.fullTime) {
+      if (['FINISHED','IN_PLAY','PAUSED'].includes(m.status) && m.score?.fullTime) {
         const g1 = m.score.fullTime.home;
         const g2 = m.score.fullTime.away;
         if (g1 != null && g2 != null) {
@@ -244,8 +351,18 @@ async function autoSync() {
         }
       }
     }
-    if (updated > 0) { saveDB(); broadcast(); }
-    console.log(`[auto-sync] ${new Date().toISOString()} — ${updated} resultado(s) atualizado(s)`);
+    saveDB(); broadcast();
+    res.json({ ok: true, updated });
+  } catch (e) {
+    res.status(500).json({ error: 'Erro de conexão: ' + e.message });
+  }
+});
+
+// ===== AUTO-SYNC =====
+async function autoSync() {
+  try {
+    const updated = await doSync();
+    console.log(`[auto-sync] ${new Date().toISOString()} — ${updated} resultado(s)`);
   } catch (e) {
     console.error('[auto-sync] erro:', e.message);
   }
@@ -253,13 +370,11 @@ async function autoSync() {
 
 // ===== START =====
 const PORT = process.env.PORT || 3000;
-const SYNC_INTERVAL_MS = parseInt(process.env.SYNC_INTERVAL_MS) || 5 * 60 * 1000; // padrão: 5 min
+const SYNC_INTERVAL_MS = parseInt(process.env.SYNC_INTERVAL_MS) || 5 * 60 * 1000;
 
 app.listen(PORT, () => {
   console.log(`✅ Bolão rodando em http://localhost:${PORT}`);
-  // Primeira sync ao iniciar (se tiver chave)
   autoSync();
-  // Sync automática em loop
   setInterval(autoSync, SYNC_INTERVAL_MS);
-  console.log(`🔄 Auto-sync configurado a cada ${SYNC_INTERVAL_MS / 60000} min`);
+  console.log(`🔄 Auto-sync a cada ${SYNC_INTERVAL_MS / 60000} min`);
 });

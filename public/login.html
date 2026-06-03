@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bolão Copa 2026 — Entrar</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;min-height:100vh;background:linear-gradient(135deg,#004d20 0%,#007a3d 50%,#005c2a 100%);display:flex;align-items:center;justify-content:center;padding:1rem}
+.container{width:100%;max-width:380px}
+.logo-wrap{text-align:center;margin-bottom:2rem}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:42px;letter-spacing:2px;color:white;line-height:1}
+.logo span{color:#f5c518}
+.logo-sub{font-size:13px;color:rgba(255,255,255,0.65);margin-top:4px;letter-spacing:0.5px}
+.card{background:white;border-radius:20px;padding:2rem;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+.tabs{display:flex;background:#f4f4f0;border-radius:10px;padding:4px;margin-bottom:1.75rem;gap:4px}
+.tab{flex:1;padding:9px;border:none;border-radius:8px;background:none;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;color:#666;cursor:pointer;transition:all 0.15s}
+.tab.active{background:white;color:#007a3d;font-weight:600;box-shadow:0 1px 4px rgba(0,0,0,0.12)}
+.form-group{margin-bottom:1.1rem}
+label{display:block;font-size:13px;font-weight:500;color:#444;margin-bottom:5px}
+input[type=text],input[type=password]{width:100%;padding:11px 14px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:15px;font-family:'DM Sans',sans-serif;color:#1a1a1a;background:#fafafa;transition:border-color 0.15s}
+input:focus{outline:none;border-color:#007a3d;background:white}
+.btn{width:100%;padding:13px;background:#007a3d;color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;transition:background 0.15s;margin-top:0.25rem}
+.btn:hover{background:#005c2a}
+.btn:disabled{opacity:0.6;cursor:not-allowed}
+.msg{font-size:13px;padding:10px 14px;border-radius:8px;margin-top:1rem;display:none}
+.msg.err{background:#fce8e8;color:#c0392b;display:block}
+.msg.ok{background:#e8f7ef;color:#007a3d;display:block}
+.divider{text-align:center;color:#aaa;font-size:12px;margin:1.25rem 0;position:relative}
+.divider::before,.divider::after{content:'';position:absolute;top:50%;width:40%;height:1px;background:#e0e0e0}
+.divider::before{left:0}.divider::after{right:0}
+.ball{font-size:60px;opacity:0.07;position:fixed;pointer-events:none;user-select:none}
+.ball-1{top:5%;left:8%}.ball-2{bottom:10%;right:6%;font-size:80px}.ball-3{top:45%;right:3%;font-size:40px}
+</style>
+</head>
+<body>
+<span class="ball ball-1">⚽</span>
+<span class="ball ball-2">⚽</span>
+<span class="ball ball-3">⚽</span>
+
+<div class="container">
+  <div class="logo-wrap">
+    <div class="logo">⚽ Bolão <span>Copa 2026</span></div>
+    <div class="logo-sub">EUA · México · Canadá — 11 jun a 19 jul 2026</div>
+  </div>
+
+  <div class="card">
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('login')">Entrar</button>
+      <button class="tab" onclick="showTab('register')">Cadastrar</button>
+    </div>
+
+    <!-- LOGIN -->
+    <div id="tab-login">
+      <div class="form-group">
+        <label for="loginUser">Nome de usuário</label>
+        <input type="text" id="loginUser" placeholder="seu_nome" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false">
+      </div>
+      <div class="form-group">
+        <label for="loginPass">Senha</label>
+        <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="btn" id="btnLogin" onclick="doLogin()">Entrar</button>
+      <div class="msg" id="loginMsg"></div>
+    </div>
+
+    <!-- REGISTER -->
+    <div id="tab-register" style="display:none">
+      <div class="form-group">
+        <label for="regUser">Escolha um nome de usuário</label>
+        <input type="text" id="regUser" placeholder="ex: joao_silva" maxlength="30" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false">
+      </div>
+      <div class="form-group">
+        <label for="regPass">Senha</label>
+        <input type="password" id="regPass" placeholder="mínimo 6 caracteres" autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label for="regPass2">Confirmar senha</label>
+        <input type="password" id="regPass2" placeholder="repita a senha" autocomplete="new-password">
+      </div>
+      <button class="btn" id="btnRegister" onclick="doRegister()">Criar conta</button>
+      <div class="msg" id="registerMsg"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showTab(t) {
+  document.getElementById('tab-login').style.display = t === 'login' ? '' : 'none';
+  document.getElementById('tab-register').style.display = t === 'register' ? '' : 'none';
+  document.querySelectorAll('.tab').forEach((el, i) => {
+    el.classList.toggle('active', (i === 0) === (t === 'login'));
+  });
+}
+
+async function doLogin() {
+  const btn = document.getElementById('btnLogin');
+  const msg = document.getElementById('loginMsg');
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  msg.className = 'msg'; msg.textContent = '';
+  if (!username || !password) { showMsg(msg, 'Preencha todos os campos.', 'err'); return; }
+  btn.disabled = true; btn.textContent = 'Entrando...';
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const d = await r.json();
+    if (r.ok) { window.location.href = '/app'; }
+    else { showMsg(msg, d.error || 'Erro ao entrar.', 'err'); }
+  } catch { showMsg(msg, 'Erro de conexão.', 'err'); }
+  btn.disabled = false; btn.textContent = 'Entrar';
+}
+
+async function doRegister() {
+  const btn = document.getElementById('btnRegister');
+  const msg = document.getElementById('registerMsg');
+  const username = document.getElementById('regUser').value.trim();
+  const password = document.getElementById('regPass').value;
+  const password2 = document.getElementById('regPass2').value;
+  msg.className = 'msg'; msg.textContent = '';
+  if (!username || !password || !password2) { showMsg(msg, 'Preencha todos os campos.', 'err'); return; }
+  if (password.length < 6) { showMsg(msg, 'A senha deve ter pelo menos 6 caracteres.', 'err'); return; }
+  if (password !== password2) { showMsg(msg, 'As senhas não coincidem.', 'err'); return; }
+  btn.disabled = true; btn.textContent = 'Criando conta...';
+  try {
+    const r = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const d = await r.json();
+    if (r.ok) { window.location.href = '/app'; }
+    else { showMsg(msg, d.error || 'Erro ao criar conta.', 'err'); }
+  } catch { showMsg(msg, 'Erro de conexão.', 'err'); }
+  btn.disabled = false; btn.textContent = 'Criar conta';
+}
+
+function showMsg(el, text, type) {
+  el.textContent = text;
+  el.className = 'msg ' + type;
+}
+
+// Allow Enter key
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const loginVisible = document.getElementById('tab-login').style.display !== 'none';
+    if (loginVisible) doLogin(); else doRegister();
+  }
+});
+</script>
+</body>
+</html>

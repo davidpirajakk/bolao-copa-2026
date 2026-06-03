@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bolão Copa 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--green:#00a651;--green-dark:#007a3d;--green-light:#e8f7ef;--gold:#f5c518;--gold-dark:#c49a00;--red:#e63946;--bg:#f4f4f0;--surface:#ffffff;--text:#1a1a1a;--text-muted:#666;--border:#e0e0e0;--radius:12px;--shadow:0 2px 12px rgba(0,0,0,0.08)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.header{background:var(--green-dark);color:white;padding:0 1rem;position:sticky;top:0;z-index:50;box-shadow:0 2px 8px rgba(0,0,0,0.2)}
+.header-inner{max-width:700px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:56px}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;display:flex;align-items:center;gap:8px}
+.logo span{color:var(--gold)}
+.header-right{display:flex;align-items:center;gap:8px}
+.player-badge{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:20px;padding:4px 14px;font-size:13px;display:flex;align-items:center;gap:6px}
+.logout-btn{background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);border-radius:20px;padding:4px 12px;font-size:12px;cursor:pointer;color:white;display:flex;align-items:center;gap:4px;white-space:nowrap;transition:background 0.15s}
+.logout-btn:hover{background:rgba(255,255,255,0.22)}
+.sync-btn{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:20px;padding:4px 12px;font-size:12px;cursor:pointer;color:white;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.sync-btn:hover{background:rgba(255,255,255,0.25)}
+.sync-btn.syncing{opacity:0.7;cursor:default}
+.nav{background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:56px;z-index:40}
+.nav-inner{max-width:700px;margin:0 auto;display:flex;overflow-x:auto;scrollbar-width:none}
+.nav-inner::-webkit-scrollbar{display:none}
+.nav-btn{padding:0 18px;height:44px;border:none;background:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;color:var(--text-muted);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;transition:all 0.15s}
+.nav-btn.active{color:var(--green-dark);border-bottom-color:var(--green-dark)}
+.main{max-width:700px;margin:0 auto;padding:1rem}
+.section{display:none}.section.active{display:block}
+.card{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:1rem 1.25rem;margin-bottom:12px;box-shadow:var(--shadow)}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.badge-green{background:#e8f7ef;color:var(--green-dark)}
+.badge-amber{background:#fff8e0;color:var(--gold-dark)}
+.badge-red{background:#fce8e8;color:var(--red)}
+.badge-gray{background:var(--bg);color:var(--text-muted)}
+.badge-blue{background:#e8f0fe;color:#1a56c4}
+.badge-live{background:#ff4444;color:white;animation:pulse 1.2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.6}}
+input[type=number]{-moz-appearance:textfield}
+input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+.score-inp{width:48px;height:44px;text-align:center;font-family:'Bebas Neue',sans-serif;font-size:22px;border:1.5px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text)}
+.score-inp:focus{outline:none;border-color:var(--green);background:white}
+.score-inp:disabled{opacity:0.45;cursor:not-allowed}
+.btn-save{background:var(--green-dark);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap}
+.btn-save:hover{background:var(--green)}
+.ranking-header{display:grid;grid-template-columns:36px 1fr 56px 56px 56px;gap:8px;padding:0 4px 8px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--border);margin-bottom:4px}
+.rank-row{display:grid;grid-template-columns:36px 1fr 56px 56px 56px;gap:8px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--border)}
+.rank-row:last-child{border-bottom:none}
+.rank-pos{font-family:'Bebas Neue',sans-serif;font-size:18px;text-align:center;color:var(--text-muted)}
+.rank-pos.gold{color:#c49a00}.rank-pos.silver{color:#888}.rank-pos.bronze{color:#a0522d}
+.rank-info{display:flex;align-items:center;gap:10px}
+.avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;flex-shrink:0}
+.rank-name{font-weight:500;font-size:14px}
+.rank-sub{font-size:11px;color:var(--text-muted)}
+.rank-cell{text-align:center;font-size:14px;font-weight:500}
+.rank-pts{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--green-dark);text-align:center}
+.fase-label{font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin:1.25rem 0 8px;padding-left:4px}
+.jogo-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:8px;box-shadow:var(--shadow)}
+.jogo-card.live{border-color:#ff4444;border-width:2px}
+.jogo-meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.jogo-teams{display:flex;align-items:center}
+.jogo-team{flex:1;font-weight:600;font-size:14px;display:flex;align-items:center;gap:6px}
+.jogo-team.right{justify-content:flex-end}
+.flag{font-size:22px;line-height:1}
+.jogo-score{width:70px;text-align:center;font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--green-dark)}
+.palpite-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:8px;box-shadow:var(--shadow)}
+.palpite-meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.palpite-teams{display:flex;align-items:center;gap:6px}
+.palpite-team{flex:1;font-weight:500;font-size:13px;display:flex;align-items:center;gap:5px}
+.palpite-team.right{justify-content:flex-end}
+.score-vs{font-size:13px;color:var(--text-muted);padding:0 2px}
+.result-line{font-size:11px;color:var(--text-muted);text-align:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+.empty{text-align:center;padding:2rem 1rem;color:var(--text-muted);font-size:14px}
+.rule-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+.rule-row:last-child{border-bottom:none}
+.rule-pts{font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--green-dark);width:40px}
+.rule-sub{font-size:12px;color:var(--text-muted)}
+.hero{background:linear-gradient(135deg,var(--green-dark) 0%,#005c2a 100%);color:white;border-radius:var(--radius);padding:1.5rem;margin-bottom:1rem;position:relative;overflow:hidden}
+.hero::before{content:'⚽';position:absolute;right:-10px;top:-10px;font-size:80px;opacity:0.08}
+.hero h1{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:1px;margin-bottom:4px}
+.hero h1 span{color:var(--gold)}
+.hero p{font-size:13px;opacity:0.8}
+.hero-stats{display:flex;gap:1rem;margin-top:1rem;flex-wrap:wrap}
+.hero-stat{background:rgba(255,255,255,0.12);border-radius:8px;padding:8px 14px;text-align:center}
+.hero-stat-num{font-family:'Bebas Neue',sans-serif;font-size:22px}
+.hero-stat-lbl{font-size:10px;opacity:0.7;text-transform:uppercase;letter-spacing:0.5px}
+.api-box{background:#fffbea;border:1.5px solid #f5c518;border-radius:var(--radius);padding:1rem 1.25rem;margin-bottom:1rem}
+.api-box h3{font-size:14px;font-weight:600;margin-bottom:8px;color:#7a5a00}
+.api-box p{font-size:12px;color:#7a5a00;margin-bottom:10px;line-height:1.6}
+.api-input-row{display:flex;gap:8px}
+.api-key-input{flex:1;padding:8px 12px;border:1.5px solid #f5c518;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;background:white}
+.api-key-input:focus{outline:none;border-color:var(--gold-dark)}
+.btn-set-key{background:var(--gold-dark);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap}
+.btn-set-key:hover{background:#a07800}
+.api-status{font-size:12px;margin-top:8px;padding:6px 10px;border-radius:6px;display:none}
+.api-status.ok{background:#e8f7ef;color:var(--green-dark);display:block}
+.api-status.err{background:#fce8e8;color:var(--red);display:block}
+.admin-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:8px;box-shadow:var(--shadow)}
+.admin-row{display:flex;align-items:center;gap:6px}
+.admin-team{flex:1;font-size:13px;font-weight:500;display:flex;align-items:center;gap:5px}
+.admin-team.right{justify-content:flex-end}
+.conn-dot{width:8px;height:8px;border-radius:50%;background:#aaa;display:inline-block;margin-right:4px}
+.conn-dot.ok{background:#00a651}.conn-dot.err{background:#e63946}
+@media(max-width:480px){.ranking-header,.rank-row{grid-template-columns:32px 1fr 44px 44px 44px;font-size:12px}.hero h1{font-size:22px}.jogo-team,.admin-team{font-size:12px}.flag{font-size:18px}.sync-btn span{display:none}.logout-btn span{display:none}}
+</style>
+</head>
+<body>
+<header class="header">
+  <div class="header-inner">
+    <div class="logo">⚽ Bolão <span>Copa 2026</span></div>
+    <div class="header-right">
+      <button class="sync-btn" id="syncBtn" onclick="syncResultados()">
+        <span id="syncIcon">🔄</span> <span>Atualizar placares</span>
+      </button>
+      <div class="player-badge" id="playerBadge">
+        👤 <span id="playerBadgeText">…</span>
+      </div>
+      <button class="logout-btn" onclick="doLogout()" title="Sair">
+        🚪 <span>Sair</span>
+      </button>
+    </div>
+  </div>
+</header>
+<nav class="nav">
+  <div class="nav-inner">
+    <button class="nav-btn active" onclick="switchTab('ranking',this)">🏆 Ranking</button>
+    <button class="nav-btn" onclick="switchTab('palpites',this)">✏️ Palpites</button>
+    <button class="nav-btn" onclick="switchTab('jogos',this)">📅 Jogos</button>
+    <button class="nav-btn" onclick="switchTab('admin',this)">⚙️ Admin</button>
+    <button class="nav-btn" onclick="switchTab('regras',this)">📋 Regras</button>
+  </div>
+</nav>
+<main class="main">
+  <div id="sec-ranking" class="section active">
+    <div class="hero">
+      <h1>Bolão <span>Copa 2026</span></h1>
+      <p>EUA · México · Canadá — 11 jun a 19 jul 2026</p>
+      <div class="hero-stats">
+        <div class="hero-stat"><div class="hero-stat-num" id="stat-players">0</div><div class="hero-stat-lbl">jogadores</div></div>
+        <div class="hero-stat"><div class="hero-stat-num">78</div><div class="hero-stat-lbl">jogos</div></div>
+        <div class="hero-stat"><div class="hero-stat-num" id="stat-done">0</div><div class="hero-stat-lbl">encerrados</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ranking-header">
+        <div>#</div><div>Jogador</div><div style="text-align:center">Exatos</div><div style="text-align:center">Vitórias</div><div style="text-align:center">Pts</div>
+      </div>
+      <div id="rankingList"></div>
+    </div>
+  </div>
+
+  <div id="sec-palpites" class="section"><div id="palpitesContent"></div></div>
+  <div id="sec-jogos" class="section"><div id="jogosList"></div></div>
+
+  <div id="sec-admin" class="section">
+    <div class="api-box" id="apiBox">
+      <h3>🔑 Configurar atualização automática</h3>
+      <p>Cole sua chave da <b>football-data.org</b> abaixo e os placares serão atualizados automaticamente.<br>
+      Não tem chave? Cadastre-se grátis em <b>football-data.org</b> → clique em "Get free API token".<br>
+      <b>A chave fica salva no servidor</b> — compartilhada com todos.</p>
+      <div class="api-input-row">
+        <input class="api-key-input" id="apiKeyInput" type="password" placeholder="Cole sua chave aqui (ex: a1b2c3d4e5f6...)">
+        <button class="btn-set-key" onclick="saveApiKey()">Salvar chave</button>
+      </div>
+      <div class="api-status" id="apiStatus"></div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <b style="font-size:15px">⚙️ Resultados manuais</b>
+      <p style="font-size:13px;color:var(--text-muted);margin-top:6px">Se preferir, insira os placares manualmente. Com a chave da API configurada, use o botão "Atualizar placares" no topo.</p>
+    </div>
+    <div id="adminList"></div>
+  </div>
+
+  <div id="sec-regras" class="section">
+    <div class="card">
+      <b style="font-size:15px;display:block;margin-bottom:12px">📋 Pontuação — os critérios acumulam</b>
+      <div class="rule-row">
+        <div class="rule-pts" style="color:#00a651">5</div>
+        <div><div style="font-size:14px;font-weight:500">🟢 Placar Exato</div><div class="rule-sub">Acertou o placar preciso (ex: 2 × 1)</div></div>
+      </div>
+      <div class="rule-row">
+        <div class="rule-pts" style="color:#1a56c4">3</div>
+        <div><div style="font-size:14px;font-weight:500">🔵 Placar Vencedor</div><div class="rule-sub">Acertou o vencedor mas não o placar exato</div></div>
+      </div>
+      <div class="rule-row">
+        <div class="rule-pts" style="color:#0097a7">+1</div>
+        <div><div style="font-size:14px;font-weight:500">🩵 Diferença de Gols</div><div class="rule-sub">A diferença entre os placares é a mesma (ex: 2-0 vs 3-1)</div></div>
+      </div>
+      <div class="rule-row">
+        <div class="rule-pts" style="color:#7b1fa2">+1</div>
+        <div><div style="font-size:14px;font-weight:500">🟣 Gols do Perdedor</div><div class="rule-sub">Acertou quantos gols o time perdedor fez</div></div>
+      </div>
+      <div class="rule-row">
+        <div class="rule-pts" style="color:#f5a623">+1</div>
+        <div><div style="font-size:14px;font-weight:500">🟠 Goleada (extra)</div><div class="rule-sub">Palpitou e saiu goleada (diferença ≥ 3 gols)</div></div>
+      </div>
+      <div style="font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin:14px 0 4px">Tempo extra (eliminatórias)</div>
+      <div class="rule-row">
+        <div class="rule-pts" style="color:#546e7a">+1</div>
+        <div><div style="font-size:14px;font-weight:500">Prorrogação</div><div class="rule-sub">Palpitou empate e o jogo foi pra prorrogação</div></div>
+      </div>
+      <div class="rule-row">
+        <div class="rule-pts" style="color:#546e7a">+1</div>
+        <div><div style="font-size:14px;font-weight:500">Pênaltis</div><div class="rule-sub">Palpitou empate e o jogo foi pra pênaltis</div></div>
+      </div>
+      <div style="background:#f4f4f0;border-radius:8px;padding:10px 12px;margin-top:12px;font-size:12px;color:var(--text-muted);line-height:1.7">
+        <b style="color:var(--text)">Exemplo:</b> você palpita 2 × 1 e sai 3 × 1 →
+        <span style="color:#1a56c4">+3 vencedor</span> +
+        <span style="color:#7b1fa2">+1 perdedor (1 gol)</span> = <b>4 pts</b>
+      </div>
+    </div>
+    <div class="card">
+      <b style="font-size:15px;display:block;margin-bottom:12px">🔄 Atualização automática</b>
+      <p style="font-size:14px;line-height:1.8;color:var(--text-muted)">
+        1. Vá em <b style="color:var(--text)">Admin</b> e cole sua chave da football-data.org.<br>
+        2. Clique em <b style="color:var(--text)">Atualizar placares</b> no topo a qualquer momento.<br>
+        3. O site busca todos os resultados da Copa e atualiza o ranking automaticamente.<br>
+        4. Durante jogos ao vivo, o placar aparece em tempo real com badge vermelho.
+      </p>
+    </div>
+    <div class="card">
+      <b style="font-size:15px;display:block;margin-bottom:12px">📌 Como usar</b>
+      <p style="font-size:14px;line-height:1.8;color:var(--text-muted)">
+        1. Faça login ou crie sua conta na tela inicial.<br>
+        2. Vá em <b style="color:var(--text)">Palpites</b> e preencha os placares antes dos jogos.<br>
+        3. Os pontos são calculados automaticamente e o <b style="color:var(--text)">Ranking</b> é atualizado.<br>
+        4. Palpites travam após o resultado ser inserido.<br>
+        5. Todos os dados são compartilhados em tempo real entre todos os participantes.
+      </p>
+    </div>
+  </div>
+</main>
+
+<script>
+// ===== BANDEIRAS =====
+const FLAG_CODES={
+  'México':'mx','África do Sul':'za','Coreia do Sul':'kr','Rep. Tcheca':'cz',
+  'Canadá':'ca','Bósnia-Herz.':'ba','Estados Unidos':'us','Paraguai':'py',
+  'Austrália':'au','Turquia':'tr','Catar':'qa','Suíça':'ch',
+  'Brasil':'br','Marrocos':'ma','Haiti':'ht','Escócia':'gb-sct',
+  'Alemanha':'de','Curaçao':'cw','Costa do Marfim':'ci','Equador':'ec',
+  'Holanda':'nl','Japão':'jp','Suécia':'se','Tunísia':'tn',
+  'Espanha':'es','Cabo Verde':'cv','Arábia Saudita':'sa','Uruguai':'uy',
+  'Bélgica':'be','Egito':'eg','Irã':'ir','Nova Zelândia':'nz',
+  'Áustria':'at','Jordânia':'jo','França':'fr','Senegal':'sn',
+  'Iraque':'iq','Noruega':'no','Argentina':'ar','Argélia':'dz',
+  'Portugal':'pt','Congo (RD)':'cd','Uzbequistão':'uz','Colômbia':'co',
+  'Inglaterra':'gb-eng','Croácia':'hr','Gana':'gh','Panamá':'pa',
+};
+function flag(t,sz){
+  const code=FLAG_CODES[t];
+  if(!code) return '<span style="font-size:18px">⚽</span>';
+  const s=sz||24;
+  return `<img src="https://flagcdn.com/${s}x${Math.round(s*0.75)}/${code}.png" alt="${t}" title="${t}" style="width:${s}px;height:${Math.round(s*0.75)}px;object-fit:cover;border-radius:2px;vertical-align:middle;display:inline-block">`;
+}
+
+// ===== JOGOS =====
+const JOGOS=[
+  {id:1,fase:'1ª Rodada — Grupo A',data:'11/jun',hora:'16h',time1:'México',time2:'África do Sul'},
+  {id:2,fase:'1ª Rodada — Grupo A',data:'11/jun',hora:'23h',time1:'Coreia do Sul',time2:'Rep. Tcheca'},
+  {id:3,fase:'1ª Rodada — Grupo B',data:'12/jun',hora:'16h',time1:'Canadá',time2:'Bósnia-Herz.'},
+  {id:4,fase:'1ª Rodada — Grupo D',data:'12/jun',hora:'22h',time1:'Estados Unidos',time2:'Paraguai'},
+  {id:5,fase:'1ª Rodada — Grupo D',data:'13/jun',hora:'01h',time1:'Austrália',time2:'Turquia'},
+  {id:6,fase:'1ª Rodada — Grupo B',data:'13/jun',hora:'16h',time1:'Catar',time2:'Suíça'},
+  {id:7,fase:'1ª Rodada — Grupo C',data:'13/jun',hora:'19h',time1:'Brasil',time2:'Marrocos'},
+  {id:8,fase:'1ª Rodada — Grupo C',data:'13/jun',hora:'22h',time1:'Haiti',time2:'Escócia'},
+  {id:9,fase:'1ª Rodada — Grupo E',data:'14/jun',hora:'14h',time1:'Alemanha',time2:'Curaçao'},
+  {id:10,fase:'1ª Rodada — Grupo F',data:'14/jun',hora:'17h',time1:'Holanda',time2:'Japão'},
+  {id:11,fase:'1ª Rodada — Grupo E',data:'14/jun',hora:'20h',time1:'Costa do Marfim',time2:'Equador'},
+  {id:12,fase:'1ª Rodada — Grupo F',data:'14/jun',hora:'23h',time1:'Suécia',time2:'Tunísia'},
+  {id:13,fase:'1ª Rodada — Grupo H',data:'15/jun',hora:'13h',time1:'Espanha',time2:'Cabo Verde'},
+  {id:14,fase:'1ª Rodada — Grupo G',data:'15/jun',hora:'16h',time1:'Bélgica',time2:'Egito'},
+  {id:15,fase:'1ª Rodada — Grupo H',data:'15/jun',hora:'19h',time1:'Arábia Saudita',time2:'Uruguai'},
+  {id:16,fase:'1ª Rodada — Grupo G',data:'15/jun',hora:'22h',time1:'Irã',time2:'Nova Zelândia'},
+  {id:17,fase:'1ª Rodada — Grupo J',data:'16/jun',hora:'01h',time1:'Áustria',time2:'Jordânia'},
+  {id:18,fase:'1ª Rodada — Grupo I',data:'16/jun',hora:'16h',time1:'França',time2:'Senegal'},
+  {id:19,fase:'1ª Rodada — Grupo I',data:'16/jun',hora:'19h',time1:'Iraque',time2:'Noruega'},
+  {id:20,fase:'1ª Rodada — Grupo J',data:'16/jun',hora:'22h',time1:'Argentina',time2:'Argélia'},
+  {id:21,fase:'1ª Rodada — Grupo K',data:'17/jun',hora:'14h',time1:'Portugal',time2:'Congo (RD)'},
+  {id:22,fase:'1ª Rodada — Grupo L',data:'17/jun',hora:'17h',time1:'Inglaterra',time2:'Croácia'},
+  {id:23,fase:'1ª Rodada — Grupo L',data:'17/jun',hora:'20h',time1:'Gana',time2:'Panamá'},
+  {id:24,fase:'1ª Rodada — Grupo K',data:'17/jun',hora:'23h',time1:'Uzbequistão',time2:'Colômbia'},
+  {id:25,fase:'2ª Rodada — Grupo A',data:'18/jun',hora:'13h',time1:'Rep. Tcheca',time2:'África do Sul'},
+  {id:26,fase:'2ª Rodada — Grupo B',data:'18/jun',hora:'16h',time1:'Suíça',time2:'Bósnia-Herz.'},
+  {id:27,fase:'2ª Rodada — Grupo B',data:'18/jun',hora:'19h',time1:'Canadá',time2:'Catar'},
+  {id:28,fase:'2ª Rodada — Grupo A',data:'18/jun',hora:'22h',time1:'México',time2:'Coreia do Sul'},
+  {id:29,fase:'2ª Rodada — Grupo D',data:'19/jun',hora:'01h',time1:'Turquia',time2:'Paraguai'},
+  {id:30,fase:'2ª Rodada — Grupo D',data:'19/jun',hora:'16h',time1:'Estados Unidos',time2:'Austrália'},
+  {id:31,fase:'2ª Rodada — Grupo C',data:'19/jun',hora:'19h',time1:'Escócia',time2:'Marrocos'},
+  {id:32,fase:'2ª Rodada — Grupo C',data:'19/jun',hora:'21h30',time1:'Brasil',time2:'Haiti'},
+  {id:33,fase:'2ª Rodada — Grupo F',data:'20/jun',hora:'01h',time1:'Tunísia',time2:'Japão'},
+  {id:34,fase:'2ª Rodada — Grupo F',data:'20/jun',hora:'14h',time1:'Holanda',time2:'Suécia'},
+  {id:35,fase:'2ª Rodada — Grupo E',data:'20/jun',hora:'17h',time1:'Alemanha',time2:'Costa do Marfim'},
+  {id:36,fase:'2ª Rodada — Grupo E',data:'20/jun',hora:'21h',time1:'Equador',time2:'Curaçao'},
+  {id:37,fase:'2ª Rodada — Grupo H',data:'21/jun',hora:'13h',time1:'Espanha',time2:'Arábia Saudita'},
+  {id:38,fase:'2ª Rodada — Grupo G',data:'21/jun',hora:'16h',time1:'Bélgica',time2:'Irã'},
+  {id:39,fase:'2ª Rodada — Grupo H',data:'21/jun',hora:'19h',time1:'Uruguai',time2:'Cabo Verde'},
+  {id:40,fase:'2ª Rodada — Grupo G',data:'21/jun',hora:'22h',time1:'Nova Zelândia',time2:'Egito'},
+  {id:41,fase:'2ª Rodada — Grupo J',data:'22/jun',hora:'00h',time1:'Jordânia',time2:'Argélia'},
+  {id:42,fase:'2ª Rodada — Grupo J',data:'22/jun',hora:'14h',time1:'Argentina',time2:'Áustria'},
+  {id:43,fase:'2ª Rodada — Grupo I',data:'22/jun',hora:'18h',time1:'França',time2:'Iraque'},
+  {id:44,fase:'2ª Rodada — Grupo I',data:'22/jun',hora:'21h',time1:'Noruega',time2:'Senegal'},
+  {id:45,fase:'2ª Rodada — Grupo K',data:'23/jun',hora:'14h',time1:'Portugal',time2:'Uzbequistão'},
+  {id:46,fase:'2ª Rodada — Grupo L',data:'23/jun',hora:'17h',time1:'Inglaterra',time2:'Gana'},
+  {id:47,fase:'2ª Rodada — Grupo L',data:'23/jun',hora:'20h',time1:'Panamá',time2:'Croácia'},
+  {id:48,fase:'2ª Rodada — Grupo K',data:'23/jun',hora:'23h',time1:'Colômbia',time2:'Congo (RD)'},
+  {id:49,fase:'3ª Rodada — Grupo B',data:'24/jun',hora:'16h',time1:'Suíça',time2:'Canadá'},
+  {id:50,fase:'3ª Rodada — Grupo B',data:'24/jun',hora:'16h',time1:'Bósnia-Herz.',time2:'Catar'},
+  {id:51,fase:'3ª Rodada — Grupo C',data:'24/jun',hora:'19h',time1:'Escócia',time2:'Brasil'},
+  {id:52,fase:'3ª Rodada — Grupo C',data:'24/jun',hora:'19h',time1:'Marrocos',time2:'Haiti'},
+  {id:53,fase:'3ª Rodada — Grupo A',data:'24/jun',hora:'22h',time1:'Rep. Tcheca',time2:'México'},
+  {id:54,fase:'3ª Rodada — Grupo A',data:'24/jun',hora:'22h',time1:'África do Sul',time2:'Coreia do Sul'},
+  {id:55,fase:'3ª Rodada — Grupo E',data:'25/jun',hora:'17h',time1:'Curaçao',time2:'Costa do Marfim'},
+  {id:56,fase:'3ª Rodada — Grupo E',data:'25/jun',hora:'17h',time1:'Equador',time2:'Alemanha'},
+  {id:57,fase:'3ª Rodada — Grupo F',data:'25/jun',hora:'20h',time1:'Japão',time2:'Suécia'},
+  {id:58,fase:'3ª Rodada — Grupo F',data:'25/jun',hora:'20h',time1:'Tunísia',time2:'Holanda'},
+  {id:59,fase:'3ª Rodada — Grupo D',data:'25/jun',hora:'23h',time1:'Turquia',time2:'Estados Unidos'},
+  {id:60,fase:'3ª Rodada — Grupo D',data:'25/jun',hora:'23h',time1:'Paraguai',time2:'Austrália'},
+  {id:61,fase:'3ª Rodada — Grupo I',data:'26/jun',hora:'16h',time1:'Noruega',time2:'França'},
+  {id:62,fase:'3ª Rodada — Grupo I',data:'26/jun',hora:'16h',time1:'Senegal',time2:'Iraque'},
+  {id:63,fase:'3ª Rodada — Grupo H',data:'26/jun',hora:'21h',time1:'Cabo Verde',time2:'Arábia Saudita'},
+  {id:64,fase:'3ª Rodada — Grupo H',data:'26/jun',hora:'21h',time1:'Uruguai',time2:'Espanha'},
+  {id:65,fase:'3ª Rodada — Grupo G',data:'27/jun',hora:'00h',time1:'Egito',time2:'Irã'},
+  {id:66,fase:'3ª Rodada — Grupo G',data:'27/jun',hora:'00h',time1:'Nova Zelândia',time2:'Bélgica'},
+  {id:67,fase:'3ª Rodada — Grupo L',data:'27/jun',hora:'18h',time1:'Panamá',time2:'Inglaterra'},
+  {id:68,fase:'3ª Rodada — Grupo L',data:'27/jun',hora:'18h',time1:'Croácia',time2:'Gana'},
+  {id:69,fase:'3ª Rodada — Grupo K',data:'27/jun',hora:'20h30',time1:'Colômbia',time2:'Portugal'},
+  {id:70,fase:'3ª Rodada — Grupo K',data:'27/jun',hora:'20h30',time1:'Congo (RD)',time2:'Uzbequistão'},
+  {id:71,fase:'3ª Rodada — Grupo J',data:'27/jun',hora:'23h',time1:'Argélia',time2:'Áustria'},
+  {id:72,fase:'3ª Rodada — Grupo J',data:'27/jun',hora:'23h',time1:'Jordânia',time2:'Argentina'},
+  {id:73,fase:'Rodada de 32 (28 jun – 3 jul)',data:'28/jun–3/jul',hora:'—',time1:'A definir',time2:'A definir'},
+  {id:74,fase:'Oitavas de Final (4–7 jul)',data:'4–7/jul',hora:'—',time1:'A definir',time2:'A definir'},
+  {id:75,fase:'Quartas de Final (9–11 jul)',data:'9–11/jul',hora:'—',time1:'A definir',time2:'A definir'},
+  {id:76,fase:'Semifinais (14–15 jul)',data:'14–15/jul',hora:'—',time1:'A definir',time2:'A definir'},
+  {id:77,fase:'Disputa 3º Lugar',data:'18/jul',hora:'18h',time1:'A definir',time2:'A definir'},
+  {id:78,fase:'🏆 Grande Final',data:'19/jul',hora:'16h',time1:'A definir',time2:'A definir'},
+];
+
+// ===== STATE =====
+let state = { players: [], palpites: {}, resultados: {}, liveStatus: {}, hasApiKey: false };
+let currentPlayer = null;
+let currentUsername = '';
+
+// ===== AUTH =====
+async function loadCurrentUser() {
+  try {
+    const res = await fetch('/api/auth/me');
+    if (!res.ok) { window.location.href = '/'; return; }
+    const data = await res.json();
+    currentPlayer = data.playerId;
+    currentUsername = data.username;
+    document.getElementById('playerBadgeText').textContent = currentUsername;
+  } catch {
+    window.location.href = '/';
+  }
+}
+
+async function doLogout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  window.location.href = '/';
+}
+
+// ===== SSE (tempo real) =====
+let evtSource;
+function connectSSE() {
+  evtSource = new EventSource('/api/events');
+  evtSource.onmessage = (e) => {
+    state = JSON.parse(e.data);
+    const activeEl = document.activeElement;
+    const palpitesEl = document.getElementById('palpitesContent');
+    const focusedInPalpites = palpitesEl && palpitesEl.contains(activeEl) && activeEl.tagName === 'INPUT';
+    const adminEl = document.getElementById('adminList');
+    const focusedInAdmin = adminEl && adminEl.contains(activeEl) && activeEl.tagName === 'INPUT';
+
+    renderRanking();
+    renderJogos();
+    if (!focusedInPalpites) renderPalpites();
+    if (!focusedInAdmin) renderAdmin();
+  };
+  evtSource.onerror = () => {
+    evtSource.close();
+    setTimeout(connectSSE, 3000);
+  };
+}
+
+// ===== PONTUAÇÃO =====
+function scoreGame(p, r) {
+  let pts = 0;
+  const breakdown = [];
+
+  const exact = r.g1 === p.g1 && r.g2 === p.g2;
+  const rw = r.g1 > r.g2 ? 1 : r.g1 < r.g2 ? 2 : 0;
+  const pw = p.g1 > p.g2 ? 1 : p.g1 < p.g2 ? 2 : 0;
+  const correctWinner = rw === pw;
+
+  if (exact) {
+    pts += 5; breakdown.push({ label: 'Placar exato', pts: 5, color: '#00a651' });
+  } else if (correctWinner) {
+    pts += 3; breakdown.push({ label: 'Placar vencedor', pts: 3, color: '#1a56c4' });
+  }
+  if (Math.abs(r.g1 - r.g2) === Math.abs(p.g1 - p.g2)) {
+    pts += 1; breakdown.push({ label: 'Diferença de gols', pts: 1, color: '#0097a7' });
+  }
+  if (Math.min(r.g1, r.g2) === Math.min(p.g1, p.g2)) {
+    pts += 1; breakdown.push({ label: 'Gols do perdedor', pts: 1, color: '#7b1fa2' });
+  }
+  if (Math.abs(r.g1 - r.g2) >= 3 && Math.abs(p.g1 - p.g2) >= 3) {
+    pts += 1; breakdown.push({ label: 'Goleada', pts: 1, color: '#f5a623' });
+  }
+  if (p.g1 === p.g2 && r.overtime) {
+    pts += 1; breakdown.push({ label: 'Prorrogação', pts: 1, color: '#546e7a' });
+  }
+  if (p.g1 === p.g2 && r.penalties) {
+    pts += 1; breakdown.push({ label: 'Pênaltis', pts: 1, color: '#546e7a' });
+  }
+  return { pts, breakdown };
+}
+
+function calcPoints(pid) {
+  let total = 0;
+  const pal = state.palpites[pid] || {};
+  JOGOS.forEach(j => {
+    const r = state.resultados[j.id];
+    const p = pal[j.id];
+    if (!r || p == null) return;
+    total += scoreGame(p, r).pts;
+  });
+  return total;
+}
+
+function calcAcertos(pid) {
+  let ex = 0, vit = 0;
+  const pal = state.palpites[pid] || {};
+  JOGOS.forEach(j => {
+    const r = state.resultados[j.id];
+    const p = pal[j.id];
+    if (!r || p == null) return;
+    if (r.g1 === p.g1 && r.g2 === p.g2) { ex++; return; }
+    const rw = r.g1 > r.g2 ? 1 : r.g1 < r.g2 ? 2 : 0;
+    const pw = p.g1 > p.g2 ? 1 : p.g1 < p.g2 ? 2 : 0;
+    if (rw === pw) vit++;
+  });
+  return { ex, vit };
+}
+
+function getColor(i) { return 'c' + (i % 8); }
+function initials(n) {
+  const p = n.trim().split(' ');
+  return p.length > 1 ? (p[0][0] + p[p.length - 1][0]).toUpperCase() : n.substring(0, 2).toUpperCase();
+}
+function isLive(jid) {
+  return state.liveStatus[jid] === 'IN_PLAY' || state.liveStatus[jid] === 'PAUSED';
+}
+
+// ===== COLORS (inline, no CSS classes needed for avatar) =====
+const COLORS=[
+  {bg:'#e8f7ef',fg:'#007a3d'},{bg:'#e8eef7',fg:'#1a5276'},{bg:'#f7e8e8',fg:'#7a1a1a'},
+  {bg:'#f7f0e8',fg:'#7a5a1a'},{bg:'#f0e8f7',fg:'#5a1a7a'},{bg:'#e8f7f7',fg:'#1a7a7a'},
+  {bg:'#f7f7e8',fg:'#7a7a1a'},{bg:'#f7e8f0',fg:'#7a1a5a'},
+];
+function avatarStyle(i){const c=COLORS[i%8];return `background:${c.bg};color:${c.fg}`;}
+
+// ===== RENDER =====
+function renderRanking() {
+  const done = Object.keys(state.resultados).length;
+  document.getElementById('stat-players').textContent = state.players.length;
+  document.getElementById('stat-done').textContent = done;
+  if (!state.players.length) {
+    document.getElementById('rankingList').innerHTML = '<div class="empty">Nenhum participante ainda.<br>Convide seus amigos para se cadastrarem!</div>';
+    return;
+  }
+  const sorted = [...state.players].map((p, i) => ({
+    ...p, idx: i, pts: calcPoints(p.id), ...calcAcertos(p.id)
+  })).sort((a, b) => b.pts - a.pts || b.ex - a.ex);
+  const medals = ['🥇', '🥈', '🥉'];
+  const pc = ['gold', 'silver', 'bronze'];
+  let h = '';
+  sorted.forEach((p, i) => {
+    const isCurrent = p.id === currentPlayer;
+    h += `<div class="rank-row" style="${isCurrent ? 'background:#f0faf5;border-radius:8px;' : ''}">
+      <div class="rank-pos ${pc[i] || ''}">${i < 3 ? medals[i] : i + 1}</div>
+      <div class="rank-info">
+        <div class="avatar" style="${avatarStyle(p.idx)}">${initials(p.nome)}</div>
+        <div>
+          <div class="rank-name">${p.nome}${isCurrent ? ' <span style="font-size:10px;background:#007a3d;color:white;padding:1px 6px;border-radius:4px;vertical-align:middle">você</span>' : ''}</div>
+          <div class="rank-sub">${p.ex} exatos · ${p.vit} vencedores</div>
+        </div>
+      </div>
+      <div class="rank-cell">${p.ex}</div>
+      <div class="rank-cell">${p.vit}</div>
+      <div class="rank-pts">${p.pts}</div>
+    </div>`;
+  });
+  document.getElementById('rankingList').innerHTML = h;
+}
+
+function renderPalpites() {
+  const el = document.getElementById('palpitesContent');
+  if (!currentPlayer) {
+    el.innerHTML = '<div class="card"><div class="empty">Carregando...</div></div>';
+    return;
+  }
+  const p = state.players.find(x => x.id === currentPlayer);
+  if (!p) { el.innerHTML = '<div class="card"><div class="empty">Participante não encontrado.</div></div>'; return; }
+  const pal = state.palpites[p.id] || {};
+  let h = `<div class="card" style="margin-bottom:1rem"><b>Palpites de ${p.nome}</b> — <span style="color:var(--text-muted);font-size:13px">Preencha antes do jogo começar</span></div>`;
+  let fa = '';
+  JOGOS.forEach(j => {
+    if (j.fase !== fa) { fa = j.fase; h += `<div class="fase-label">${j.fase}</div>`; }
+    const r = state.resultados[j.id];
+    const pp = pal[j.id];
+    const bloq = r != null;
+    const live = isLive(j.id);
+    let badge = '';
+    if (live) badge = `<span class="badge badge-live">● AO VIVO</span>`;
+    else if (r && pp != null) {
+      const { pts, breakdown } = scoreGame(pp, r);
+      if (pts === 0) {
+        badge = `<span class="badge badge-red">0 pts</span>`;
+      } else {
+        badge = breakdown.map(b =>
+          `<span class="badge" style="background:${b.color}22;color:${b.color};margin-left:3px">+${b.pts} ${b.label}</span>`
+        ).join('');
+      }
+    } else if (!bloq) badge = `<span class="badge badge-gray">aberto</span>`;
+    const v1 = pp != null ? pp.g1 : '';
+    const v2 = pp != null ? pp.g2 : '';
+    h += `<div class="palpite-card"><div class="palpite-meta">
+      <span style="font-size:11px;color:var(--text-muted)">${j.data} ${j.hora}</span>${badge}</div>
+      <div class="palpite-teams">
+        <span class="palpite-team">${flag(j.time1,20)} ${j.time1}</span>
+        <input type="number" min="0" max="20" class="score-inp" value="${v1}" placeholder="–" ${bloq ? 'disabled' : ''} onchange="savePalpite(${p.id},${j.id},0,this.value)">
+        <span class="score-vs">×</span>
+        <input type="number" min="0" max="20" class="score-inp" value="${v2}" placeholder="–" ${bloq ? 'disabled' : ''} onchange="savePalpite(${p.id},${j.id},1,this.value)">
+        <span class="palpite-team right">${flag(j.time2,20)} ${j.time2}</span>
+      </div>${r ? `<div class="result-line">${flag(j.time1,16)} ${j.time1} ${r.g1} × ${r.g2} ${j.time2} ${flag(j.time2,16)}</div>` : ''}</div>`;
+  });
+  el.innerHTML = h;
+}
+
+function renderJogos() {
+  let h = ''; let fa = '';
+  JOGOS.forEach(j => {
+    if (j.fase !== fa) { fa = j.fase; h += `<div class="fase-label">${j.fase}</div>`; }
+    const r = state.resultados[j.id];
+    const live = isLive(j.id);
+    let statusBadge = live
+      ? `<span class="badge badge-live">● Ao vivo</span>`
+      : r ? `<span style="font-size:11px;font-weight:500;color:var(--green-dark)">✓ Encerrado</span>`
+          : `<span style="font-size:11px;color:var(--text-muted)">⏳ Aguardando</span>`;
+    h += `<div class="jogo-card ${live ? 'live' : ''}"><div class="jogo-meta">
+      <span style="font-size:11px;color:var(--text-muted);background:var(--bg);padding:2px 8px;border-radius:4px">${j.data} ${j.hora}</span>
+      ${statusBadge}</div>
+      <div class="jogo-teams">
+        <span class="jogo-team">${flag(j.time1)} ${j.time1}</span>
+        <span class="jogo-score">${r ? `${r.g1} × ${r.g2}` : '– × –'}</span>
+        <span class="jogo-team right">${j.time2} ${flag(j.time2)}</span>
+      </div></div>`;
+  });
+  document.getElementById('jogosList').innerHTML = h;
+}
+
+function renderAdmin() {
+  const box = document.getElementById('apiBox');
+  box.style.display = state.hasApiKey ? 'none' : 'block';
+  let h = ''; let fa = '';
+  JOGOS.forEach(j => {
+    if (j.fase !== fa) { fa = j.fase; h += `<div class="fase-label">${j.fase}</div>`; }
+    const r = state.resultados[j.id];
+    const g1 = r != null ? r.g1 : '';
+    const g2 = r != null ? r.g2 : '';
+    const live = isLive(j.id);
+    const isKnockout = j.id >= 73;
+    const chkOT = r?.overtime ? 'checked' : '';
+    const chkPen = r?.penalties ? 'checked' : '';
+    h += `<div class="admin-card">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">${j.data} ${j.hora}
+        ${live ? `<span class="badge badge-live" style="margin-left:6px">● Ao vivo</span>` : ''}
+        ${r && !live ? `<span class="badge badge-green" style="margin-left:6px">✓ Salvo</span>` : ''}
+      </div>
+      <div class="admin-row">
+        <span class="admin-team">${flag(j.time1,20)} ${j.time1}</span>
+        <input type="number" min="0" max="20" class="score-inp" id="adm_${j.id}_0" value="${g1}" placeholder="–" style="width:44px;height:42px;font-size:20px">
+        <span style="font-size:14px;color:var(--text-muted);font-weight:500">×</span>
+        <input type="number" min="0" max="20" class="score-inp" id="adm_${j.id}_1" value="${g2}" placeholder="–" style="width:44px;height:42px;font-size:20px">
+        <span class="admin-team right">${j.time2} ${flag(j.time2,20)}</span>
+        <button class="btn-save" onclick="saveResult(${j.id})">Salvar</button>
+      </div>
+      ${isKnockout ? `<div style="display:flex;gap:16px;margin-top:10px;font-size:13px;color:var(--text-muted)">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="adm_${j.id}_ot" ${chkOT}> Prorrogação
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="adm_${j.id}_pen" ${chkPen}> Pênaltis
+        </label>
+      </div>` : ''}
+    </div>`;
+  });
+  document.getElementById('adminList').innerHTML = h;
+}
+
+// ===== ACTIONS =====
+async function savePalpite(pid, jid, slot, val) {
+  const pal = (state.palpites[pid] || {})[jid] || { g1: 0, g2: 0 };
+  const n = parseInt(val);
+  if (isNaN(n) || n < 0) return;
+  const update = { g1: pal.g1 ?? 0, g2: pal.g2 ?? 0 };
+  if (slot === 0) update.g1 = n; else update.g2 = n;
+  await fetch(`/api/palpites/${pid}/${jid}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(update)
+  });
+}
+
+async function saveResult(jid) {
+  const g1 = parseInt(document.getElementById(`adm_${jid}_0`).value);
+  const g2 = parseInt(document.getElementById(`adm_${jid}_1`).value);
+  if (isNaN(g1) || isNaN(g2)) { alert('Insira os dois placares.'); return; }
+  const otEl = document.getElementById(`adm_${jid}_ot`);
+  const penEl = document.getElementById(`adm_${jid}_pen`);
+  await fetch(`/api/results/${jid}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ g1, g2, overtime: otEl?.checked || false, penalties: penEl?.checked || false })
+  });
+}
+
+async function saveApiKey() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (!key) { alert('Cole sua chave primeiro.'); return; }
+  const res = await fetch('/api/settings/apikey', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key })
+  });
+  if (res.ok) {
+    showApiStatus('✓ Chave salva! Clique em "Atualizar placares" no topo para buscar os resultados.', 'ok');
+    state.hasApiKey = true;
+    document.getElementById('apiBox').style.display = 'none';
+  } else {
+    showApiStatus('Erro ao salvar chave.', 'err');
+  }
+}
+
+async function syncResultados() {
+  if (!state.hasApiKey) {
+    switchTab('admin', document.querySelectorAll('.nav-btn')[3]);
+    alert('Configure sua chave da football-data.org na aba Admin primeiro.');
+    return;
+  }
+  const btn = document.getElementById('syncBtn');
+  const icon = document.getElementById('syncIcon');
+  btn.classList.add('syncing');
+  icon.textContent = '⏳';
+  btn.onclick = null;
+  try {
+    const res = await fetch('/api/sync', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      showApiStatus(`✓ ${data.updated} resultado(s) atualizado(s) com sucesso!`, 'ok');
+    } else {
+      showApiStatus(data.error || 'Erro ao sincronizar', 'err');
+      switchTab('admin', document.querySelectorAll('.nav-btn')[3]);
+    }
+  } catch (e) {
+    showApiStatus('Erro de conexão: ' + e.message, 'err');
+  } finally {
+    btn.classList.remove('syncing');
+    icon.textContent = '🔄';
+    btn.onclick = syncResultados;
+  }
+}
+
+function showApiStatus(msg, type) {
+  const el = document.getElementById('apiStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'api-status ' + type;
+}
+
+// ===== NAV =====
+function switchTab(id, btn) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('sec-' + id).classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (id === 'palpites') renderPalpites();
+  if (id === 'admin') renderAdmin();
+  if (id === 'jogos') renderJogos();
+  if (id === 'ranking') renderRanking();
+}
+
+// ===== INIT =====
+(async () => {
+  await loadCurrentUser();
+  connectSSE();
+})();
+</script>
+</body>
+</html>
