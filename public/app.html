@@ -590,6 +590,7 @@ function renderAdmin() {
         <input type="number" min="0" max="20" class="score-inp" id="adm_${j.id}_1" value="${g2}" placeholder="–" style="width:44px;height:42px;font-size:20px">
         <span class="admin-team right">${j.time2} ${flag(j.time2,20)}</span>
         <button class="btn-save" onclick="saveResult(${j.id})">Salvar</button>
+        ${r ? `<button onclick="deleteResult(${j.id})" style="background:none;border:1px solid #e63946;color:#e63946;border-radius:8px;padding:8px 10px;font-size:12px;cursor:pointer;white-space:nowrap" title="Apagar resultado">🗑️</button>` : ''}
       </div>
       ${isKnockout ? `<div style="display:flex;gap:16px;margin-top:10px;font-size:13px;color:var(--text-muted)">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
@@ -616,6 +617,11 @@ async function savePalpite(pid, jid, slot, val) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(update)
   });
+}
+
+async function deleteResult(jid) {
+  if (!confirm('Apagar o resultado deste jogo?')) return;
+  await fetch(`/api/results/${jid}`, { method: 'DELETE' });
 }
 
 async function saveResult(jid) {
