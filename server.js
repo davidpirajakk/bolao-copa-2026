@@ -175,6 +175,15 @@ function requireAuth(req, res, next) {
   }).catch(() => res.redirect('/'));
 }
 
+function requireAdmin(req, res, next) {
+  getAuthUser(req).then(user => {
+    const ADMIN = (process.env.ADMIN_USERNAME || 'david').toLowerCase();
+    if (!user || user.username.toLowerCase() !== ADMIN) return res.status(403).json({ error: 'Acesso negado' });
+    req.user = user;
+    next();
+  }).catch(() => res.status(403).json({ error: 'Acesso negado' }));
+}
+
 const COOKIE_OPTS = { httpOnly: true, sameSite: 'lax', maxAge: 30 * 24 * 60 * 60 * 1000 };
 
 // ===== SSE =====
@@ -264,7 +273,8 @@ app.post('/api/auth/logout', (req, res) => {
 app.get('/api/auth/me', async (req, res) => {
   const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Não autenticado' });
-  res.json({ id: user.id, username: user.username, playerId: user.playerId });
+  const ADMIN = (process.env.ADMIN_USERNAME || 'david').toLowerCase();
+  res.json({ id: user.id, username: user.username, playerId: user.playerId, isAdmin: user.username.toLowerCase() === ADMIN });
 });
 
 // ===== API ROUTES =====
@@ -310,7 +320,7 @@ app.put('/api/palpites/:playerId/:jogoId', async (req, res) => {
   res.json({ ok: true });
 });
 
-app.put('/api/results/:jogoId', async (req, res) => {
+app.put('/api/results/:jogoId', requireAdmin, async (req, res) => {
   const jogoId = parseInt(req.params.jogoId);
   const g1 = parseInt(req.body.g1);
   const g2 = parseInt(req.body.g2);
@@ -329,13 +339,13 @@ app.put('/api/results/:jogoId', async (req, res) => {
   res.json({ ok: true });
 });
 
-app.delete('/api/results/:jogoId', async (req, res) => {
+app.delete('/api/results/:jogoId', requireAdmin, async (req, res) => {
   await pool.query('DELETE FROM resultados WHERE jogo_id = $1', [parseInt(req.params.jogoId)]);
   broadcast();
   res.json({ ok: true });
 });
 
-app.put('/api/settings/apikey', async (req, res) => {
+app.put('/api/settings/apikey', requireAdmin, async (req, res) => {
   const key = (req.body.key || '').trim();
   if (!key) return res.status(400).json({ error: 'Chave inválida' });
   await pool.query(
@@ -425,7 +435,7 @@ async function doSync() {
   return updated;
 }
 
-app.post('/api/sync', async (req, res) => {
+app.post('/api/sync', requireAdmin, async (req, res) => {
   const apiKey = await getApiKey();
   if (!apiKey) return res.status(400).json({ error: 'API key não configurada' });
   try {

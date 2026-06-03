@@ -126,7 +126,7 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
     <button class="nav-btn active" onclick="switchTab('ranking',this)">🏆 Ranking</button>
     <button class="nav-btn" onclick="switchTab('palpites',this)">✏️ Palpites</button>
     <button class="nav-btn" onclick="switchTab('jogos',this)">📅 Jogos</button>
-    <button class="nav-btn" onclick="switchTab('admin',this)">⚙️ Admin</button>
+    <button class="nav-btn" id="adminTab" onclick="switchTab('admin',this)">⚙️ Admin</button>
     <button class="nav-btn" onclick="switchTab('regras',this)">📋 Regras</button>
   </div>
 </nav>
@@ -340,6 +340,7 @@ const JOGOS=[
 let state = { players: [], palpites: {}, resultados: {}, liveStatus: {}, hasApiKey: false };
 let currentPlayer = null;
 let currentUsername = '';
+let currentIsAdmin = false;
 
 // ===== AUTH =====
 async function loadCurrentUser() {
@@ -349,7 +350,11 @@ async function loadCurrentUser() {
     const data = await res.json();
     currentPlayer = data.playerId;
     currentUsername = data.username;
+    currentIsAdmin = data.isAdmin || false;
     document.getElementById('playerBadgeText').textContent = currentUsername;
+    if (!currentIsAdmin) {
+      document.getElementById('adminTab').style.display = 'none';
+    }
   } catch {
     window.location.href = '/';
   }
