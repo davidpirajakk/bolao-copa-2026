@@ -421,6 +421,7 @@ let currentPlayer = null;
 let currentUsername = '';
 let currentIsAdmin = false;
 let currentCampeao = null; // user's own pick (irreversible once set)
+let pendingCampeao = null; // selected but not yet confirmed
 
 // ===== AUTH =====
 async function loadCurrentUser() {
@@ -812,11 +813,26 @@ function renderCampeao() {
     SELECOES.forEach(sel => {
       const code = FLAG_CODES[sel];
       const imgUrl = code ? `https://flagcdn.com/48x36/${code}.png` : '';
-      grid += `<button class="camp-btn" onclick="pickCampeao('${sel.replace(/'/g,"\\'")}')">
+      const isPending = pendingCampeao === sel;
+      grid += `<button class="camp-btn ${isPending ? 'camp-picked' : ''}" onclick="selectCampeao('${sel.replace(/'/g,"\\'")}')">
         ${imgUrl ? `<img src="${imgUrl}" alt="${sel}">` : '<span style="font-size:30px">⚽</span>'}
         <span>${sel}</span>
       </button>`;
     });
+
+    const confirmBar = pendingCampeao ? (() => {
+      const code = FLAG_CODES[pendingCampeao];
+      return `<div style="position:sticky;bottom:0;background:white;border-top:2px solid var(--green);padding:14px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 -4px 16px rgba(0,0,0,0.1);border-radius:0 0 var(--radius) var(--radius);margin-top:12px">
+        ${code ? `<img src="https://flagcdn.com/32x24/${code}.png" style="border-radius:3px">` : ''}
+        <span style="font-weight:600;font-size:14px;flex:1">${pendingCampeao}</span>
+        <button onclick="pickCampeao('${pendingCampeao.replace(/'/g,"\\'")}') " style="background:linear-gradient(135deg,#004d22,#007a3d);color:white;border:none;border-radius:var(--radius-sm);padding:11px 24px;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;box-shadow:0 2px 8px rgba(0,107,53,0.35)">
+          ✅ Confirmar aposta
+        </button>
+        <button onclick="selectCampeao(null)" style="background:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px;font-size:13px;cursor:pointer;color:var(--text-muted);font-family:'DM Sans',sans-serif">
+          Cancelar
+        </button>
+      </div>`;
+    })() : '';
 
     let picksHtml = '';
     if (picksList.length) {
@@ -839,9 +855,10 @@ function renderCampeao() {
       <div style="background:linear-gradient(135deg,#004d22,#006b35);border-radius:var(--radius);padding:1.5rem;color:white;margin-bottom:1rem;text-align:center">
         <div style="font-size:36px;margin-bottom:8px">🏆</div>
         <div style="font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:1px">Quem vai ser Campeão?</div>
-        <div style="font-size:13px;opacity:0.75;margin-top:6px">Clique na seleção para confirmar sua aposta.<br><b>Atenção: a escolha não pode ser desfeita.</b></div>
+        <div style="font-size:13px;opacity:0.75;margin-top:6px">Selecione uma seleção e clique em confirmar.<br><b>Atenção: a escolha não pode ser desfeita.</b></div>
       </div>
       <div class="camp-grid">${grid}</div>
+      ${confirmBar}
       ${picksHtml}`;
     return;
   }
@@ -876,8 +893,12 @@ function renderCampeao() {
     </div>`;
 }
 
+function selectCampeao(sel) {
+  pendingCampeao = sel;
+  renderCampeao();
+}
+
 async function pickCampeao(sel) {
-  if (!confirm(`Confirmar aposta em "${sel}"?\n\nAtenção: esta escolha não pode ser desfeita.`)) return;
   const res = await fetch('/api/campeao', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -886,6 +907,7 @@ async function pickCampeao(sel) {
   const data = await res.json();
   if (res.ok) {
     currentCampeao = sel;
+    pendingCampeao = null;
     document.getElementById('campeaoTab').textContent = '🏆 Campeão';
     renderCampeao();
   } else {
