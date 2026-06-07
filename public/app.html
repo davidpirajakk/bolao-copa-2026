@@ -219,6 +219,10 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
       </div>
       <div class="api-status" id="apiStatus"></div>
     </div>
+    <div class="card" style="margin-bottom:1rem">
+      <b style="font-size:15px">👥 Gerenciar usuários</b>
+      <div id="usersList" style="margin-top:12px"></div>
+    </div>
     <div class="card" style="margin-bottom:1rem;border:1.5px solid var(--gold)">
       <b style="font-size:15px">🏆 Definir campeão real</b>
       <p style="font-size:13px;color:var(--text-muted);margin:8px 0 12px">Após a final, selecione a seleção campeã para distribuir os +${CAMPEAO_BONUS} pontos automaticamente.</p>
@@ -681,6 +685,8 @@ function renderJogos() {
 function renderAdmin() {
   const box = document.getElementById('apiBox');
   box.style.display = state.hasApiKey ? 'none' : 'block';
+  // Load users list
+  loadUsersList();
   // Populate campeão real select
   const sel = document.getElementById('campeaoRealSelect');
   if (sel) {
@@ -760,6 +766,41 @@ async function saveResult(jid) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ g1, g2, overtime: otEl?.checked || false, penalties: penEl?.checked || false })
   });
+}
+
+async function loadUsersList() {
+  const el = document.getElementById('usersList');
+  if (!el) return;
+  try {
+    const res = await fetch('/api/admin/users');
+    if (!res.ok) return;
+    const users = await res.json();
+    if (!users.length) { el.innerHTML = '<div style="font-size:13px;color:var(--text-muted)">Nenhum usuário cadastrado.</div>'; return; }
+    el.innerHTML = users.map(u => {
+      const isSelf = u.username.toLowerCase() === currentUsername.toLowerCase();
+      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+        <div style="flex:1">
+          <span style="font-weight:600;font-size:14px">${u.username}</span>
+          ${isSelf ? ' <span style="font-size:10px;background:#007a3d;color:white;padding:1px 6px;border-radius:4px">você</span>' : ''}
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">ID #${u.id}</div>
+        </div>
+        ${!isSelf ? `<button onclick="deleteUser(${u.id},'${u.username.replace(/'/g,"\\'")}')" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap">🗑️ Remover</button>` : ''}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="font-size:13px;color:var(--red)">Erro ao carregar usuários.</div>';
+  }
+}
+
+async function deleteUser(id, username) {
+  if (!confirm(`Remover o usuário "${username}"?\n\nTodos os palpites e dados dele serão apagados permanentemente.`)) return;
+  const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+  const data = await res.json();
+  if (res.ok) {
+    loadUsersList();
+  } else {
+    alert(data.error || 'Erro ao remover usuário.');
+  }
 }
 
 async function saveCampeaoReal() {
