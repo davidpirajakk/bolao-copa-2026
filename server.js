@@ -71,12 +71,13 @@ async function initDB() {
 }
 
 async function getState() {
-  const [playersR, palpitesR, resultadosR, liveR, settingsR] = await Promise.all([
+  const [playersR, palpitesR, resultadosR, liveR, settingsR, campeaoRealR] = await Promise.all([
     pool.query('SELECT id, nome FROM players ORDER BY id'),
     pool.query('SELECT player_id, jogo_id, g1, g2 FROM palpites'),
     pool.query('SELECT jogo_id, g1, g2, overtime, penalties FROM resultados'),
     pool.query('SELECT jogo_id, status FROM live_status'),
     pool.query("SELECT value FROM settings WHERE key = 'api_key'"),
+    pool.query("SELECT value FROM settings WHERE key = 'campeao_real'"),
   ]);
 
   const palpites = {};
@@ -108,6 +109,7 @@ async function getState() {
     resultados,
     liveStatus,
     campeoes,
+    campeaoReal: campeaoRealR.rows.length ? campeaoRealR.rows[0].value : null,
     hasApiKey: settingsR.rows.length > 0 && !!settingsR.rows[0].value,
   };
 }
@@ -289,9 +291,12 @@ app.get('/api/auth/me', async (req, res) => {
   res.json({ id: user.id, username: user.username, playerId: user.playerId, isAdmin: user.username.toLowerCase() === ADMIN, campeao });
 });
 
+const CAMPEAO_LOCK = new Date(Date.UTC(2026, 5, 11, 18, 0)); // 11/jun 15h BRT = 18h UTC
+
 app.put('/api/campeao', async (req, res) => {
   const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Não autenticado' });
+  if (Date.now() >= CAMPEAO_LOCK.getTime()) return res.status(400).json({ error: 'Prazo encerrado. As apostas do campeão fecharam 1h antes do início da Copa.' });
   const campeao = (req.body.campeao || '').trim();
   if (!campeao) return res.status(400).json({ error: 'Seleção inválida' });
   const existing = await pool.query('SELECT campeao FROM users WHERE id = $1', [user.id]);
@@ -396,6 +401,17 @@ app.put('/api/results/:jogoId', requireAdmin, async (req, res) => {
 
 app.delete('/api/results/:jogoId', requireAdmin, async (req, res) => {
   await pool.query('DELETE FROM resultados WHERE jogo_id = $1', [parseInt(req.params.jogoId)]);
+  broadcast();
+  res.json({ ok: true });
+});
+
+app.put('/api/settings/campeao-real', requireAdmin, async (req, res) => {
+  const campeao = (req.body.campeao || '').trim();
+  if (!campeao) return res.status(400).json({ error: 'Seleção inválida' });
+  await pool.query(
+    "INSERT INTO settings (key, value) VALUES ('campeao_real', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+    [campeao]
+  );
   broadcast();
   res.json({ ok: true });
 });

@@ -219,6 +219,17 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
       </div>
       <div class="api-status" id="apiStatus"></div>
     </div>
+    <div class="card" style="margin-bottom:1rem;border:1.5px solid var(--gold)">
+      <b style="font-size:15px">🏆 Definir campeão real</b>
+      <p style="font-size:13px;color:var(--text-muted);margin:8px 0 12px">Após a final, selecione a seleção campeã para distribuir os +${CAMPEAO_BONUS} pontos automaticamente.</p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="campeaoRealSelect" style="flex:1;min-width:160px;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:'DM Sans',sans-serif;background:white">
+          <option value="">-- Selecione a campeã --</option>
+        </select>
+        <button class="btn-save" onclick="saveCampeaoReal()">Confirmar campeã</button>
+      </div>
+      <div id="campeaoRealStatus" class="api-status"></div>
+    </div>
     <div class="card" style="margin-bottom:1rem">
       <b style="font-size:15px">⚙️ Resultados manuais</b>
       <p style="font-size:13px;color:var(--text-muted);margin-top:6px">Se preferir, insira os placares manualmente. Com a chave da API configurada, use o botão "Atualizar placares" no topo.</p>
@@ -416,7 +427,8 @@ function isGameLocked(j) {
 }
 
 // ===== STATE =====
-let state = { players: [], palpites: {}, resultados: {}, liveStatus: {}, campeoes: {}, hasApiKey: false };
+const CAMPEAO_BONUS = 25;
+let state = { players: [], palpites: {}, resultados: {}, liveStatus: {}, campeoes: {}, campeaoReal: null, hasApiKey: false };
 let currentPlayer = null;
 let currentUsername = '';
 let currentIsAdmin = false;
@@ -517,6 +529,9 @@ function calcPoints(pid) {
     if (!r || p == null) return;
     total += scoreGame(p, r).pts;
   });
+  if (state.campeaoReal && (state.campeoes || {})[String(pid)] === state.campeaoReal) {
+    total += CAMPEAO_BONUS;
+  }
   return total;
 }
 
@@ -579,7 +594,7 @@ function renderRanking() {
       <div class="rank-info">
         ${avatarHtml}
         <div>
-          <div class="rank-name">${p.nome}${isCurrent ? ' <span style="font-size:10px;background:#007a3d;color:white;padding:1px 6px;border-radius:4px;vertical-align:middle">você</span>' : ''}</div>
+          <div class="rank-name">${p.nome}${isCurrent ? ' <span style="font-size:10px;background:#007a3d;color:white;padding:1px 6px;border-radius:4px;vertical-align:middle">você</span>' : ''}${state.campeaoReal && (state.campeoes||{})[String(p.id)] === state.campeaoReal ? ` <span style="font-size:10px;background:#f5c518;color:#78350f;padding:1px 6px;border-radius:4px;vertical-align:middle">🏆 +${CAMPEAO_BONUS}pts</span>` : ''}</div>
           <div class="rank-sub">${p.ex} exatos · ${p.vit} vencedores</div>
         </div>
       </div>
@@ -662,6 +677,18 @@ function renderJogos() {
 function renderAdmin() {
   const box = document.getElementById('apiBox');
   box.style.display = state.hasApiKey ? 'none' : 'block';
+  // Populate campeão real select
+  const sel = document.getElementById('campeaoRealSelect');
+  if (sel) {
+    const current = state.campeaoReal || '';
+    sel.innerHTML = '<option value="">-- Selecione a campeã --</option>' +
+      SELECOES.map(s => `<option value="${s}" ${s === current ? 'selected' : ''}>${s}</option>`).join('');
+    const status = document.getElementById('campeaoRealStatus');
+    if (current && status) {
+      status.textContent = `✓ Campeã atual: ${current} (+${CAMPEAO_BONUS} pts para quem acertou)`;
+      status.className = 'api-status ok';
+    }
+  }
   let h = ''; let fa = '';
   JOGOS.forEach(j => {
     if (j.fase !== fa) { fa = j.fase; h += `<div class="fase-label">${j.fase}</div>`; }
@@ -731,6 +758,26 @@ async function saveResult(jid) {
   });
 }
 
+async function saveCampeaoReal() {
+  const campeao = document.getElementById('campeaoRealSelect').value;
+  if (!campeao) { alert('Selecione uma seleção.'); return; }
+  if (!confirm(`Definir "${campeao}" como campeã da Copa 2026?\nIsso dará +${CAMPEAO_BONUS} pts para quem apostou nela.`)) return;
+  const res = await fetch('/api/settings/campeao-real', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ campeao })
+  });
+  const data = await res.json();
+  const status = document.getElementById('campeaoRealStatus');
+  if (res.ok) {
+    status.textContent = `✓ Campeã definida: ${campeao} (+${CAMPEAO_BONUS} pts distribuídos)`;
+    status.className = 'api-status ok';
+  } else {
+    status.textContent = data.error || 'Erro ao salvar.';
+    status.className = 'api-status err';
+  }
+}
+
 async function saveApiKey() {
   const key = document.getElementById('apiKeyInput').value.trim();
   if (!key) { alert('Cole sua chave primeiro.'); return; }
@@ -796,16 +843,46 @@ const SELECOES = [
   'Tunísia','Turquia','Uruguai','Uzbequistão','África do Sul','Argélia',
 ].sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
 
+const CAMPEAO_LOCK = new Date(Date.UTC(2026, 5, 11, 18, 0)); // 11/jun 15h BRT = 18h UTC
+function isCampeaoLocked() { return Date.now() >= CAMPEAO_LOCK.getTime(); }
+
 function renderCampeao() {
   const el = document.getElementById('campeaoContent');
   if (!el) return;
   const myPick = currentCampeao;
+  const locked = isCampeaoLocked();
 
   // Build picks list from state
   const picksList = state.players.map((p, i) => {
     const pick = (state.campeoes || {})[String(p.id)];
     return { player: p, pick, idx: i };
   }).filter(x => x.pick);
+
+  if (!myPick && locked) {
+    // Deadline passed, user never picked
+    const picksHtml = picksList.length ? `
+      <div class="card" style="margin-top:1rem">
+        <b style="font-size:14px">🏟️ Apostas confirmadas (${picksList.length}/${state.players.length})</b>
+        <div class="camp-picks-list" style="margin-top:10px">
+          ${picksList.map(x => {
+            const c = FLAG_CODES[x.pick];
+            return `<div class="camp-pick-row">
+              ${c ? `<img src="https://flagcdn.com/32x24/${c}.png" style="border-radius:3px;flex-shrink:0">` : ''}
+              <span style="font-weight:600;font-size:13px">${x.pick}</span>
+              <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">${x.player.nome}</span>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>` : '';
+    el.innerHTML = `
+      <div style="background:#f3f4f6;border:2px solid var(--border);border-radius:var(--radius);padding:1.5rem;text-align:center;margin-bottom:1rem">
+        <div style="font-size:36px;margin-bottom:8px">🔒</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--text-muted)">Apostas encerradas</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:6px">O prazo para apostar no campeão encerrou 1h antes do início da Copa.</div>
+      </div>
+      ${picksHtml}`;
+    return;
+  }
 
   if (!myPick) {
     // Selection UI
@@ -856,6 +933,7 @@ function renderCampeao() {
         <div style="font-size:36px;margin-bottom:8px">🏆</div>
         <div style="font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:1px">Quem vai ser Campeão?</div>
         <div style="font-size:13px;opacity:0.75;margin-top:6px">Selecione uma seleção e clique em confirmar.<br><b>Atenção: a escolha não pode ser desfeita.</b></div>
+        <div style="font-size:12px;background:rgba(255,255,255,0.12);border-radius:8px;padding:6px 12px;margin-top:10px;display:inline-block">🔒 Prazo: 11/jun às 15h (BRT) — 1h antes do início da Copa</div>
       </div>
       <div class="camp-grid">${grid}</div>
       ${confirmBar}
