@@ -309,6 +309,32 @@ app.put('/api/campeao', async (req, res) => {
 // ===== API ROUTES =====
 app.get('/api/state', async (req, res) => res.json(await getState()));
 
+// Admin: exportar backup completo (sem senhas)
+app.get('/api/admin/export', requireAdmin, async (req, res) => {
+  const [usersR, playersR, palpitesR, resultadosR] = await Promise.all([
+    pool.query('SELECT id, username, player_id, campeao FROM users ORDER BY id'),
+    pool.query('SELECT id, nome FROM players ORDER BY id'),
+    pool.query('SELECT player_id, jogo_id, g1, g2 FROM palpites ORDER BY player_id, jogo_id'),
+    pool.query('SELECT jogo_id, g1, g2, overtime, penalties FROM resultados ORDER BY jogo_id'),
+  ]);
+  const backup = {
+    exportedAt: new Date().toISOString(),
+    counts: {
+      usuarios: usersR.rows.length,
+      palpites: palpitesR.rows.length,
+      resultados: resultadosR.rows.length,
+    },
+    users: usersR.rows,
+    players: playersR.rows,
+    palpites: palpitesR.rows,
+    resultados: resultadosR.rows,
+  };
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="backup-bolao-${stamp}.json"`);
+  res.send(JSON.stringify(backup, null, 2));
+});
+
 // Admin: listar usuários
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   const r = await pool.query('SELECT u.id, u.username, p.nome, p.id as player_id FROM users u JOIN players p ON p.id = u.player_id ORDER BY u.id');

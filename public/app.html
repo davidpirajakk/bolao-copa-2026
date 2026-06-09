@@ -219,6 +219,11 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
       </div>
       <div class="api-status" id="apiStatus"></div>
     </div>
+    <div class="card" style="margin-bottom:1rem;border:1.5px solid var(--green)">
+      <b style="font-size:15px">💾 Backup dos dados</b>
+      <p style="font-size:13px;color:var(--text-muted);margin:8px 0 12px">Baixe uma cópia de todos os palpites, apostas e participantes no seu computador. Faça isso periodicamente para nunca perder nada.</p>
+      <button class="btn-save" onclick="baixarBackup()" style="background:linear-gradient(135deg,var(--green-dark),var(--green-mid))">⬇️ Baixar backup (.json)</button>
+    </div>
     <div class="card" style="margin-bottom:1rem">
       <b style="font-size:15px">👥 Gerenciar usuários</b>
       <div id="usersList" style="margin-top:12px"></div>
@@ -766,6 +771,25 @@ async function saveResult(jid) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ g1, g2, overtime: otEl?.checked || false, penalties: penEl?.checked || false })
   });
+}
+
+async function baixarBackup() {
+  try {
+    const res = await fetch('/api/admin/export');
+    if (!res.ok) { alert('Erro ao gerar backup.'); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    a.download = `backup-bolao-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('Erro ao baixar backup: ' + e.message);
+  }
 }
 
 async function loadUsersList() {
