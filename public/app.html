@@ -446,6 +446,7 @@ let currentPlayer = null;
 let currentUsername = '';
 let currentIsAdmin = false;
 let currentCampeao = null; // user's own pick (irreversible once set)
+let currentCanPickCampeao = false; // server decides: before deadline OR late entrant
 let pendingCampeao = null; // selected but not yet confirmed
 
 // ===== AUTH =====
@@ -458,6 +459,7 @@ async function loadCurrentUser() {
     currentUsername = data.username;
     currentIsAdmin = data.isAdmin || false;
     currentCampeao = data.campeao || null;
+    currentCanPickCampeao = data.canPickCampeao || false;
     document.getElementById('playerBadgeText').textContent = currentUsername;
     if (!currentIsAdmin) {
       document.getElementById('adminTab').style.display = 'none';
@@ -919,7 +921,8 @@ function renderCampeao() {
   const el = document.getElementById('campeaoContent');
   if (!el) return;
   const myPick = currentCampeao;
-  const locked = isCampeaoLocked();
+  // Quem pode escolher é decidido pelo servidor (antes do prazo OU entrada atrasada)
+  const locked = !currentCanPickCampeao;
 
   // Build picks list from state
   const picksList = state.players.map((p, i) => {

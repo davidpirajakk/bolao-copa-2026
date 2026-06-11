@@ -28,6 +28,11 @@ async function initDB() {
     `);
     // Migration: add campeao column if table already exists without it
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS campeao TEXT`);
+    // Migration: created_at — usuários existentes ficam ANTES do prazo (travados);
+    // novos cadastros recebem NOW() automaticamente e podem escolher o campeão.
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ`);
+    await client.query(`UPDATE users SET created_at = '2026-06-01T00:00:00Z' WHERE created_at IS NULL`);
+    await client.query(`ALTER TABLE users ALTER COLUMN created_at SET DEFAULT NOW()`);
     await client.query(`
       CREATE TABLE IF NOT EXISTS players (
         id SERIAL PRIMARY KEY,
@@ -286,20 +291,28 @@ app.get('/api/auth/me', async (req, res) => {
   const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Não autenticado' });
   const ADMIN = (process.env.ADMIN_USERNAME || 'david').toLowerCase();
-  const r = await pool.query('SELECT campeao FROM users WHERE id = $1', [user.id]);
+  const r = await pool.query('SELECT campeao, created_at FROM users WHERE id = $1', [user.id]);
   const campeao = r.rows[0]?.campeao || null;
-  res.json({ id: user.id, username: user.username, playerId: user.playerId, isAdmin: user.username.toLowerCase() === ADMIN, campeao });
+  res.json({ id: user.id, username: user.username, playerId: user.playerId, isAdmin: user.username.toLowerCase() === ADMIN, campeao, canPickCampeao: canPickCampeao(r.rows[0]?.created_at) });
 });
 
 const CAMPEAO_LOCK = new Date(Date.UTC(2026, 5, 11, 18, 0)); // 11/jun 15h BRT = 18h UTC
 
+// Pode escolher o campeão se: antes do prazo global, OU se cadastrou depois do prazo (entrada atrasada)
+function canPickCampeao(createdAt) {
+  if (Date.now() < CAMPEAO_LOCK.getTime()) return true;
+  return createdAt && new Date(createdAt).getTime() >= CAMPEAO_LOCK.getTime();
+}
+
 app.put('/api/campeao', async (req, res) => {
   const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Não autenticado' });
-  if (Date.now() >= CAMPEAO_LOCK.getTime()) return res.status(400).json({ error: 'Prazo encerrado. As apostas do campeão fecharam 1h antes do início da Copa.' });
   const campeao = (req.body.campeao || '').trim();
   if (!campeao) return res.status(400).json({ error: 'Seleção inválida' });
-  const existing = await pool.query('SELECT campeao FROM users WHERE id = $1', [user.id]);
+  const existing = await pool.query('SELECT campeao, created_at FROM users WHERE id = $1', [user.id]);
+  if (!canPickCampeao(existing.rows[0]?.created_at)) {
+    return res.status(400).json({ error: 'Prazo encerrado. As apostas do campeão fecharam 1h antes do início da Copa.' });
+  }
   if (existing.rows[0]?.campeao) return res.status(400).json({ error: 'Você já fez sua aposta. Não é possível alterar.' });
   await pool.query('UPDATE users SET campeao = $1 WHERE id = $2', [campeao, user.id]);
   broadcast();
