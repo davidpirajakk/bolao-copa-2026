@@ -306,6 +306,18 @@ app.put('/api/campeao', async (req, res) => {
   res.json({ ok: true });
 });
 
+// Admin: definir/alterar campeão de um jogador (ignora o prazo de bloqueio)
+app.put('/api/admin/campeao/:playerId', requireAdmin, async (req, res) => {
+  const playerId = parseInt(req.params.playerId);
+  const campeao = (req.body.campeao || '').trim();
+  if (isNaN(playerId)) return res.status(400).json({ error: 'Jogador inválido' });
+  if (!campeao) return res.status(400).json({ error: 'Seleção inválida' });
+  const upd = await pool.query('UPDATE users SET campeao = $1 WHERE player_id = $2 RETURNING id, username', [campeao, playerId]);
+  if (!upd.rows.length) return res.status(404).json({ error: 'Jogador não encontrado' });
+  broadcast();
+  res.json({ ok: true, username: upd.rows[0].username, campeao });
+});
+
 // ===== API ROUTES =====
 app.get('/api/state', async (req, res) => res.json(await getState()));
 
