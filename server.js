@@ -672,22 +672,21 @@ async function syncWorldCup26() {
   const games = data.games || [];
   if (!games.length) return 0;
 
-  // Só jogos que a football-data considera AO VIVO (status confiável)
-  const liveR = await pool.query("SELECT jogo_id FROM live_status WHERE status IN ('IN_PLAY', 'PAUSED')");
-  const liveSet = new Set(liveR.rows.map(r => r.jogo_id));
-  if (!liveSet.size) return 0;
-
   let updated = 0;
   for (const m of games) {
+    // Sinal confiável da worldcup26: só conta se o jogo começou ou terminou
+    if (!m.time_elapsed || m.time_elapsed === 'notstarted') continue;
+
     const t1 = API_NAME_MAP[m.home_team_name_en] || m.home_team_name_en;
     const t2 = API_NAME_MAP[m.away_team_name_en] || m.away_team_name_en;
     const jogoId = JOGOS_MAP[`${t1}|${t2}`];
-    if (!jogoId || !liveSet.has(jogoId)) continue;
+    if (!jogoId) continue;
 
     const g1 = parseInt(m.home_score);
     const g2 = parseInt(m.away_score);
     if (isNaN(g1) || isNaN(g2)) continue;
 
+    // Nunca sobrescreve 'manual'; só atualiza se o placar realmente mudou
     const r = await pool.query(
       `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties, source) VALUES ($1, $2, $3, false, false, 'api')
        ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, source = 'api'
