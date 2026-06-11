@@ -33,6 +33,8 @@ async function initDB() {
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ`);
     await client.query(`UPDATE users SET created_at = '2026-06-01T00:00:00Z' WHERE created_at IS NULL`);
     await client.query(`ALTER TABLE users ALTER COLUMN created_at SET DEFAULT NOW()`);
+    // Migration: origem do resultado — 'manual' (admin) nunca é sobrescrito pelas APIs
+    await client.query(`ALTER TABLE resultados ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'api'`);
     await client.query(`
       CREATE TABLE IF NOT EXISTS players (
         id SERIAL PRIMARY KEY,
@@ -442,8 +444,8 @@ app.put('/api/results/:jogoId', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Placar inválido' });
 
   await pool.query(
-    `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties) VALUES ($1, $2, $3, $4, $5)
-     ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, overtime = $4, penalties = $5`,
+    `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties, source) VALUES ($1, $2, $3, $4, $5, 'manual')
+     ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, overtime = $4, penalties = $5, source = 'manual'`,
     [jogoId, g1, g2, overtime, penalties]
   );
   broadcast();
@@ -592,8 +594,9 @@ async function doSync() {
       const g2 = m.score.fullTime.away;
       if (g1 != null && g2 != null) {
         await pool.query(
-          `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties) VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, overtime = $4, penalties = $5`,
+          `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties, source) VALUES ($1, $2, $3, $4, $5, 'api')
+           ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, overtime = $4, penalties = $5, source = 'api'
+           WHERE resultados.source IS DISTINCT FROM 'manual'`,
           [jogoId, g1, g2, m.score.extraTime != null, m.score.penalties != null]
         );
         updated++;
@@ -644,18 +647,66 @@ app.post('/api/sync', requireAdmin, async (req, res) => {
         }
       }
     }
+    // Fonte secundária (best-effort): placar ao vivo mais rápido
+    let wc = 0;
+    try { wc = await syncWorldCup26(); } catch (_) {}
     broadcast();
-    res.json({ ok: true, updated });
+    res.json({ ok: true, updated: updated + wc });
   } catch (e) {
     res.status(500).json({ error: 'Erro de conexão: ' + e.message });
   }
 });
 
+// ===== FONTE SECUNDÁRIA: worldcup26 (placar ao vivo mais rápido) =====
+// Salvaguardas: timeout 3s, nunca trava, nunca sobrescreve 'manual',
+// e só atualiza jogos que a football-data já marcou como IN_PLAY/PAUSED.
+async function syncWorldCup26() {
+  let data;
+  try {
+    const res = await fetch('https://worldcup26.ir/get/games', { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return 0;
+    data = await res.json();
+  } catch {
+    return 0; // best-effort: timeout/erro → ignora silenciosamente
+  }
+  const games = data.games || [];
+  if (!games.length) return 0;
+
+  // Só jogos que a football-data considera AO VIVO (status confiável)
+  const liveR = await pool.query("SELECT jogo_id FROM live_status WHERE status IN ('IN_PLAY', 'PAUSED')");
+  const liveSet = new Set(liveR.rows.map(r => r.jogo_id));
+  if (!liveSet.size) return 0;
+
+  let updated = 0;
+  for (const m of games) {
+    const t1 = API_NAME_MAP[m.home_team_name_en] || m.home_team_name_en;
+    const t2 = API_NAME_MAP[m.away_team_name_en] || m.away_team_name_en;
+    const jogoId = JOGOS_MAP[`${t1}|${t2}`];
+    if (!jogoId || !liveSet.has(jogoId)) continue;
+
+    const g1 = parseInt(m.home_score);
+    const g2 = parseInt(m.away_score);
+    if (isNaN(g1) || isNaN(g2)) continue;
+
+    const r = await pool.query(
+      `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties, source) VALUES ($1, $2, $3, false, false, 'api')
+       ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, source = 'api'
+       WHERE resultados.source IS DISTINCT FROM 'manual' AND (resultados.g1 <> $2 OR resultados.g2 <> $3)`,
+      [jogoId, g1, g2]
+    );
+    if (r.rowCount) updated++;
+  }
+  if (updated > 0) broadcast();
+  return updated;
+}
+
 // ===== AUTO-SYNC =====
 async function autoSync() {
   try {
     const updated = await doSync();
-    console.log(`[auto-sync] ${new Date().toISOString()} — ${updated} resultado(s)`);
+    let wc = 0;
+    try { wc = await syncWorldCup26(); } catch (e) { /* fonte secundária: ignora */ }
+    console.log(`[auto-sync] ${new Date().toISOString()} — football-data: ${updated} | worldcup26: ${wc}`);
   } catch (e) {
     console.error('[auto-sync] erro:', e.message);
   }
