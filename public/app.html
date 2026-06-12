@@ -258,7 +258,7 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
 
   <div id="sec-regras" class="section">
     <div class="card">
-      <b style="font-size:15px;display:block;margin-bottom:12px">📋 Pontuação — os critérios acumulam</b>
+      <b style="font-size:15px;display:block;margin-bottom:12px">📋 Pontuação — os critérios acumulam (exceto placar exato, que vale 5 fixo)</b>
       <div class="rule-row">
         <div class="rule-pts" style="color:#00a651">5</div>
         <div><div style="font-size:14px;font-weight:500">🟢 Placar Exato</div><div class="rule-sub">Acertou o placar preciso (ex: 2 × 1)</div></div>
@@ -294,7 +294,7 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
         <span style="color:#7b1fa2">+1 gols (acertou o visitante: 1)</span> = <b>4 pts</b>
       </div>
       <div style="background:#fff8d6;border:1px solid #f5c518;border-radius:8px;padding:9px 12px;margin-top:10px;font-size:12px;color:#78350f;line-height:1.6">
-        ⚠️ <b>Ajuste de regra (a partir de 12/jun):</b> a "Diferença de gols" agora só vale se você também acertar o vencedor, e os gols valem para qualquer seleção. Os jogos de 11/jun mantêm a pontuação original.
+        ⚠️ <b>Ajustes de regra:</b> o <b>placar exato vale 5 fixo</b> (não soma diferença/gols) — vale para <b>todos</b> os jogos. A partir de <b>12/jun</b>: a "Diferença de gols" só vale se também acertar o vencedor, e os gols valem para qualquer seleção (jogos de 11/jun mantêm essas duas na forma original).
       </div>
     </div>
     <div class="card">
@@ -530,9 +530,9 @@ function scoreGame(p, r, jogo) {
   const pw = p.g1 > p.g2 ? 1 : p.g1 < p.g2 ? 2 : 0;
   const correctWinner = rw === pw;
 
-  if (exact) {
-    pts += 5; breakdown.push({ label: 'Placar exato', pts: 5, color: '#00a651' });
-  } else if (correctWinner) {
+  // Placar exato = 5 fixo, NÃO acumula nenhum outro critério (vale para todos os jogos)
+  if (exact) return { pts: 5, breakdown: [{ label: 'Placar exato', pts: 5, color: '#00a651' }] };
+  if (correctWinner) {
     pts += 3; breakdown.push({ label: 'Placar vencedor', pts: 3, color: '#1a56c4' });
   }
   // Diferença de gols — regra nova exige também acertar o vencedor
