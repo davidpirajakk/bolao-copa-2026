@@ -86,6 +86,14 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
 .jogo-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin-bottom:8px;box-shadow:var(--shadow);transition:box-shadow 0.2s}
 .jogo-card:hover{box-shadow:var(--shadow-md)}
 .jogo-card.live{border-color:#fca5a5;border-width:2px;background:linear-gradient(to right,#fff,#fff9f9)}
+.jogo-card.clickable{cursor:pointer}
+.jogo-stats{margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+.stat-row{display:flex;align-items:center;gap:8px;margin:7px 0}
+.stat-lbl{width:92px;font-size:12px;font-weight:500;display:flex;align-items:center;gap:5px;flex-shrink:0;white-space:nowrap;overflow:hidden}
+.stat-bar{flex:1;height:9px;background:#eef0ee;border-radius:5px;overflow:hidden}
+.stat-bar-fill{height:100%;border-radius:5px;transition:width 0.4s ease}
+.stat-pct{width:36px;text-align:right;font-size:12px;font-weight:700}
+.tap-hint{font-size:10px;color:var(--text-muted);opacity:0.7}
 .jogo-meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .jogo-teams{display:flex;align-items:center}
 .jogo-team{flex:1;font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px}
@@ -667,24 +675,65 @@ function renderPalpites() {
   el.innerHTML = h;
 }
 
+// Distribuição dos palpites: % vitória time1, empate, vitória time2
+function palpiteStats(jogoId) {
+  let a = 0, e = 0, b = 0, total = 0;
+  for (const pid in state.palpites) {
+    const p = state.palpites[pid][jogoId];
+    if (!p) continue;
+    total++;
+    if (p.g1 > p.g2) a++; else if (p.g1 < p.g2) b++; else e++;
+  }
+  return { a, e, b, total };
+}
+
+function statBars(j) {
+  const { a, e, b, total } = palpiteStats(j.id);
+  if (!total) return `<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:6px">Ninguém palpitou neste jogo.</div>`;
+  const pa = Math.round(a / total * 100), pe = Math.round(e / total * 100), pb = Math.round(b / total * 100);
+  const row = (lbl, pct, color) =>
+    `<div class="stat-row"><span class="stat-lbl">${lbl}</span>
+      <div class="stat-bar"><div class="stat-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      <span class="stat-pct" style="color:${color}">${pct}%</span></div>`;
+  return `<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">👀 Palpites da galera — ${total} apostaram</div>`
+    + row(`${flag(j.time1, 16)} ${j.time1}`, pa, 'var(--green-dark)')
+    + row(`🤝 Empate`, pe, '#9ca3af')
+    + row(`${flag(j.time2, 16)} ${j.time2}`, pb, '#1a56c4');
+}
+
+let openJogoStats = null;
+function toggleJogoStats(jid) {
+  openJogoStats = (openJogoStats === jid) ? null : jid;
+  renderJogos();
+}
+
 function renderJogos() {
   let h = ''; let fa = '';
   JOGOS.forEach(j => {
     if (j.fase !== fa) { fa = j.fase; h += `<div class="fase-label">${j.fase}</div>`; }
     const r = state.resultados[j.id];
     const live = isLive(j.id);
+    const open = openJogoStats === j.id;
+    const locked = isGameLocked(j);
     let statusBadge = live
       ? `<span class="badge badge-live">● Ao vivo</span>`
       : r ? `<span style="font-size:11px;font-weight:500;color:var(--green-dark)">✓ Encerrado</span>`
           : `<span style="font-size:11px;color:var(--text-muted)">⏳ Aguardando</span>`;
-    h += `<div class="jogo-card ${live ? 'live' : ''}"><div class="jogo-meta">
+    const statsSection = open
+      ? `<div class="jogo-stats">${locked
+          ? statBars(j)
+          : `<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:6px">🔒 Os palpites da galera aparecem <b>1h antes</b> do jogo começar</div>`}</div>`
+      : '';
+    h += `<div class="jogo-card clickable ${live ? 'live' : ''}" onclick="toggleJogoStats(${j.id})"><div class="jogo-meta">
       <span style="font-size:11px;color:var(--text-muted);background:var(--bg);padding:2px 8px;border-radius:4px">${j.data} ${j.hora}</span>
       ${statusBadge}</div>
       <div class="jogo-teams">
         <span class="jogo-team">${flag(j.time1)} ${j.time1}</span>
         <span class="jogo-score">${r ? `${r.g1} × ${r.g2}` : '– × –'}</span>
         <span class="jogo-team right">${j.time2} ${flag(j.time2)}</span>
-      </div></div>`;
+      </div>
+      <div style="text-align:center;margin-top:8px"><span class="tap-hint">${open ? '▲ fechar' : '👆 ver palpites da galera'}</span></div>
+      ${statsSection}</div>`;
   });
   document.getElementById('jogosList').innerHTML = h;
 }
