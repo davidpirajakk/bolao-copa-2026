@@ -258,7 +258,7 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
 
   <div id="sec-regras" class="section">
     <div class="card">
-      <b style="font-size:15px;display:block;margin-bottom:12px">📋 Pontuação — os critérios acumulam (exceto placar exato, que vale 5 fixo)</b>
+      <b style="font-size:15px;display:block;margin-bottom:12px">📋 Pontuação — os critérios acumulam (placar exato vale 5 fixo, salvo goleada exata = 7)</b>
       <div class="rule-row">
         <div class="rule-pts" style="color:#00a651">5</div>
         <div><div style="font-size:14px;font-weight:500">🟢 Placar Exato</div><div class="rule-sub">Acertou o placar preciso (ex: 2 × 1)</div></div>
@@ -277,7 +277,11 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
       </div>
       <div class="rule-row">
         <div class="rule-pts" style="color:#f5a623">+1</div>
-        <div><div style="font-size:14px;font-weight:500">🟠 Goleada (extra)</div><div class="rule-sub">Palpitou e saiu goleada (diferença ≥ 3 gols)</div></div>
+        <div><div style="font-size:14px;font-weight:500">🟠 Goleada</div><div class="rule-sub">Palpitou goleada e saiu goleada (ambos com diferença ≥ 3 gols), sem cravar o placar</div></div>
+      </div>
+      <div class="rule-row">
+        <div class="rule-pts" style="color:#f5a623">+2</div>
+        <div><div style="font-size:14px;font-weight:500">🟠 Goleada Exata</div><div class="rule-sub">Cravou o placar exato de uma goleada (ex: 5×0). Total: 5 + 2 = <b>7 pts</b></div></div>
       </div>
       <div style="font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin:14px 0 4px">Tempo extra (eliminatórias)</div>
       <div class="rule-row">
@@ -524,8 +528,15 @@ function scoreGame(p, r, jogo) {
   const pw = p.g1 > p.g2 ? 1 : p.g1 < p.g2 ? 2 : 0;
   const correctWinner = rw === pw;
 
-  // Placar exato = 5 fixo, NÃO acumula nenhum outro critério
-  if (exact) return { pts: 5, breakdown: [{ label: 'Placar exato', pts: 5, color: '#00a651' }] };
+  // Placar exato = 5 fixo. Exceção: goleada exata soma +2 (total 7)
+  if (exact) {
+    const bd = [{ label: 'Placar exato', pts: 5, color: '#00a651' }];
+    let total = 5;
+    if (Math.abs(r.g1 - r.g2) >= 3) {
+      total += 2; bd.push({ label: 'Goleada exata', pts: 2, color: '#f5a623' });
+    }
+    return { pts: total, breakdown: bd };
+  }
   if (correctWinner) {
     pts += 3; breakdown.push({ label: 'Placar vencedor', pts: 3, color: '#1a56c4' });
   }
