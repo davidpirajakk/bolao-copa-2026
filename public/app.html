@@ -294,7 +294,7 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
         <span style="color:#7b1fa2">+1 gols (acertou o visitante: 1)</span> = <b>4 pts</b>
       </div>
       <div style="background:#fff8d6;border:1px solid #f5c518;border-radius:8px;padding:9px 12px;margin-top:10px;font-size:12px;color:#78350f;line-height:1.6">
-        ⚠️ <b>Ajustes de regra:</b> o <b>placar exato vale 5 fixo</b> (não soma diferença/gols) — vale para <b>todos</b> os jogos. A partir de <b>12/jun</b>: a "Diferença de gols" só vale se também acertar o vencedor, e os gols valem para qualquer seleção (jogos de 11/jun mantêm essas duas na forma original).
+        ⚠️ <b>Regras vigentes (todos os jogos):</b> o <b>placar exato vale 5 fixo</b> (não soma mais nada); a <b>diferença de gols</b> só vale se você também acertar o vencedor; e os <b>gols</b> valem se acertar o número de gols de qualquer uma das seleções.
       </div>
     </div>
     <div class="card">
@@ -514,41 +514,28 @@ function connectSSE() {
 }
 
 // ===== PONTUAÇÃO =====
-// Regras novas valem para jogos que começam a partir daqui. Jogos já
-// disputados antes desta data mantêm a regra antiga (pontos congelados).
-const REGRA_NOVA_DESDE = new Date(Date.UTC(2026, 5, 12, 12, 0)); // 12/jun 09h BRT
-
+// Regras válidas para TODOS os jogos (uniforme).
 function scoreGame(p, r, jogo) {
   let pts = 0;
   const breakdown = [];
-
-  const kickoff = jogo ? parseGameTime(jogo.data, jogo.hora) : null;
-  const novaRegra = !kickoff || kickoff.getTime() >= REGRA_NOVA_DESDE.getTime();
 
   const exact = r.g1 === p.g1 && r.g2 === p.g2;
   const rw = r.g1 > r.g2 ? 1 : r.g1 < r.g2 ? 2 : 0;
   const pw = p.g1 > p.g2 ? 1 : p.g1 < p.g2 ? 2 : 0;
   const correctWinner = rw === pw;
 
-  // Placar exato = 5 fixo, NÃO acumula nenhum outro critério (vale para todos os jogos)
+  // Placar exato = 5 fixo, NÃO acumula nenhum outro critério
   if (exact) return { pts: 5, breakdown: [{ label: 'Placar exato', pts: 5, color: '#00a651' }] };
   if (correctWinner) {
     pts += 3; breakdown.push({ label: 'Placar vencedor', pts: 3, color: '#1a56c4' });
   }
-  // Diferença de gols — regra nova exige também acertar o vencedor
-  const diffOk = Math.abs(r.g1 - r.g2) === Math.abs(p.g1 - p.g2);
-  if (novaRegra ? (correctWinner && diffOk) : diffOk) {
+  // Diferença de gols — só vale se também acertou o vencedor
+  if (correctWinner && Math.abs(r.g1 - r.g2) === Math.abs(p.g1 - p.g2)) {
     pts += 1; breakdown.push({ label: 'Diferença de gols', pts: 1, color: '#0097a7' });
   }
-  // Gols — regra nova: acertou o nº de gols de qualquer um dos times (posição certa)
-  if (novaRegra) {
-    if (p.g1 === r.g1 || p.g2 === r.g2) {
-      pts += 1; breakdown.push({ label: 'Gols de uma seleção', pts: 1, color: '#7b1fa2' });
-    }
-  } else {
-    if (Math.min(r.g1, r.g2) === Math.min(p.g1, p.g2)) {
-      pts += 1; breakdown.push({ label: 'Gols do perdedor', pts: 1, color: '#7b1fa2' });
-    }
+  // Gols — acertou o nº de gols de qualquer um dos times (posição certa)
+  if (p.g1 === r.g1 || p.g2 === r.g2) {
+    pts += 1; breakdown.push({ label: 'Gols de uma seleção', pts: 1, color: '#7b1fa2' });
   }
   if (Math.abs(r.g1 - r.g2) >= 3 && Math.abs(p.g1 - p.g2) >= 3) {
     pts += 1; breakdown.push({ label: 'Goleada', pts: 1, color: '#f5a623' });
