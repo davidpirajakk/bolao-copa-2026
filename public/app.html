@@ -269,11 +269,11 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
       </div>
       <div class="rule-row">
         <div class="rule-pts" style="color:#0097a7">+1</div>
-        <div><div style="font-size:14px;font-weight:500">🩵 Diferença de Gols</div><div class="rule-sub">A diferença entre os placares é a mesma (ex: 2-0 vs 3-1)</div></div>
+        <div><div style="font-size:14px;font-weight:500">🩵 Diferença de Gols</div><div class="rule-sub">A diferença é a mesma <b>E</b> você acertou o vencedor (ex: palpitou 2-0 e saiu 3-1)</div></div>
       </div>
       <div class="rule-row">
         <div class="rule-pts" style="color:#7b1fa2">+1</div>
-        <div><div style="font-size:14px;font-weight:500">🟣 Gols do Perdedor</div><div class="rule-sub">Acertou quantos gols o time perdedor fez</div></div>
+        <div><div style="font-size:14px;font-weight:500">🟣 Gols de uma Seleção</div><div class="rule-sub">Acertou o número de gols de qualquer um dos times (ganhando ou perdendo)</div></div>
       </div>
       <div class="rule-row">
         <div class="rule-pts" style="color:#f5a623">+1</div>
@@ -291,7 +291,10 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
       <div style="background:#f4f4f0;border-radius:8px;padding:10px 12px;margin-top:12px;font-size:12px;color:var(--text-muted);line-height:1.7">
         <b style="color:var(--text)">Exemplo:</b> você palpita 2 × 1 e sai 3 × 1 →
         <span style="color:#1a56c4">+3 vencedor</span> +
-        <span style="color:#7b1fa2">+1 perdedor (1 gol)</span> = <b>4 pts</b>
+        <span style="color:#7b1fa2">+1 gols (acertou o visitante: 1)</span> = <b>4 pts</b>
+      </div>
+      <div style="background:#fff8d6;border:1px solid #f5c518;border-radius:8px;padding:9px 12px;margin-top:10px;font-size:12px;color:#78350f;line-height:1.6">
+        ⚠️ <b>Ajuste de regra (a partir de 12/jun):</b> a "Diferença de gols" agora só vale se você também acertar o vencedor, e os gols valem para qualquer seleção. Os jogos de 11/jun mantêm a pontuação original.
       </div>
     </div>
     <div class="card">
@@ -511,9 +514,16 @@ function connectSSE() {
 }
 
 // ===== PONTUAÇÃO =====
-function scoreGame(p, r) {
+// Regras novas valem para jogos que começam a partir daqui. Jogos já
+// disputados antes desta data mantêm a regra antiga (pontos congelados).
+const REGRA_NOVA_DESDE = new Date(Date.UTC(2026, 5, 12, 12, 0)); // 12/jun 09h BRT
+
+function scoreGame(p, r, jogo) {
   let pts = 0;
   const breakdown = [];
+
+  const kickoff = jogo ? parseGameTime(jogo.data, jogo.hora) : null;
+  const novaRegra = !kickoff || kickoff.getTime() >= REGRA_NOVA_DESDE.getTime();
 
   const exact = r.g1 === p.g1 && r.g2 === p.g2;
   const rw = r.g1 > r.g2 ? 1 : r.g1 < r.g2 ? 2 : 0;
@@ -525,11 +535,20 @@ function scoreGame(p, r) {
   } else if (correctWinner) {
     pts += 3; breakdown.push({ label: 'Placar vencedor', pts: 3, color: '#1a56c4' });
   }
-  if (Math.abs(r.g1 - r.g2) === Math.abs(p.g1 - p.g2)) {
+  // Diferença de gols — regra nova exige também acertar o vencedor
+  const diffOk = Math.abs(r.g1 - r.g2) === Math.abs(p.g1 - p.g2);
+  if (novaRegra ? (correctWinner && diffOk) : diffOk) {
     pts += 1; breakdown.push({ label: 'Diferença de gols', pts: 1, color: '#0097a7' });
   }
-  if (Math.min(r.g1, r.g2) === Math.min(p.g1, p.g2)) {
-    pts += 1; breakdown.push({ label: 'Gols do perdedor', pts: 1, color: '#7b1fa2' });
+  // Gols — regra nova: acertou o nº de gols de qualquer um dos times (posição certa)
+  if (novaRegra) {
+    if (p.g1 === r.g1 || p.g2 === r.g2) {
+      pts += 1; breakdown.push({ label: 'Gols de uma seleção', pts: 1, color: '#7b1fa2' });
+    }
+  } else {
+    if (Math.min(r.g1, r.g2) === Math.min(p.g1, p.g2)) {
+      pts += 1; breakdown.push({ label: 'Gols do perdedor', pts: 1, color: '#7b1fa2' });
+    }
   }
   if (Math.abs(r.g1 - r.g2) >= 3 && Math.abs(p.g1 - p.g2) >= 3) {
     pts += 1; breakdown.push({ label: 'Goleada', pts: 1, color: '#f5a623' });
@@ -550,7 +569,7 @@ function calcPoints(pid) {
     const r = state.resultados[j.id];
     const p = pal[j.id];
     if (!r || p == null) return;
-    total += scoreGame(p, r).pts;
+    total += scoreGame(p, r, j).pts;
   });
   if (state.campeaoReal && (state.campeoes || {})[String(pid)] === state.campeaoReal) {
     total += CAMPEAO_BONUS;
@@ -651,7 +670,7 @@ function renderPalpites() {
     if (live) badge = `<span class="badge badge-live">● AO VIVO</span>`;
     else if (timeLocked && !r) badge = `<span class="badge badge-amber">🔒 Encerrado</span>`;
     else if (r && pp != null) {
-      const { pts, breakdown } = scoreGame(pp, r);
+      const { pts, breakdown } = scoreGame(pp, r, j);
       if (pts === 0) {
         badge = `<span class="badge badge-red">0 pts</span>`;
       } else {
@@ -716,7 +735,7 @@ function palpiteResultList(j) {
   for (const p of state.players) {
     const pal = (state.palpites[String(p.id)] || {})[j.id];
     if (!pal) continue;
-    const { pts, breakdown } = scoreGame(pal, r);
+    const { pts, breakdown } = scoreGame(pal, r, j);
     rows.push({ pid: p.id, nome: p.nome, g1: pal.g1, g2: pal.g2, pts, breakdown, isMe: p.id === currentPlayer });
   }
   if (!rows.length) return '';
