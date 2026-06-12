@@ -647,51 +647,84 @@ app.post('/api/sync', requireAdmin, async (req, res) => {
         }
       }
     }
-    // Fonte secundária (best-effort): placar ao vivo mais rápido
-    let wc = 0;
-    try { wc = await syncWorldCup26(); } catch (_) {}
+    // Fonte secundária (best-effort): placar + status ao vivo mais rápido
+    let sdb = 0;
+    try { sdb = await syncSportsDB(); } catch (_) {}
     broadcast();
-    res.json({ ok: true, updated: updated + wc });
+    res.json({ ok: true, updated: updated + sdb });
   } catch (e) {
     res.status(500).json({ error: 'Erro de conexão: ' + e.message });
   }
 });
 
-// ===== FONTE SECUNDÁRIA: worldcup26 (placar ao vivo mais rápido) =====
-// Salvaguardas: timeout 3s, nunca trava, nunca sobrescreve 'manual',
-// e só atualiza jogos que a football-data já marcou como IN_PLAY/PAUSED.
-async function syncWorldCup26() {
-  let data;
-  try {
-    const res = await fetch('https://worldcup26.ir/get/games', { signal: AbortSignal.timeout(3000) });
-    if (!res.ok) return 0;
-    data = await res.json();
-  } catch {
-    return 0; // best-effort: timeout/erro → ignora silenciosamente
+// ===== FONTE SECUNDÁRIA: TheSportsDB (placar + status ao vivo, confiável) =====
+// Salvaguardas: timeout curto, nunca trava, nunca sobrescreve 'manual'.
+// Controla também o status (ao vivo/encerrado) porque é confiável nisso.
+
+// Nomes da TheSportsDB que diferem do mapa da football-data
+const SPORTSDB_ALIAS = {
+  'Bosnia-Herzegovina': 'Bósnia-Herz.', 'Bosnia and Herzegovina': 'Bósnia-Herz.',
+  'USA': 'Estados Unidos', 'United States': 'Estados Unidos',
+  'Czechia': 'Rep. Tcheca', 'Czech Republic': 'Rep. Tcheca',
+  'South Korea': 'Coreia do Sul', 'Korea Republic': 'Coreia do Sul',
+  'DR Congo': 'Congo (RD)', 'Congo DR': 'Congo (RD)',
+  'Ivory Coast': 'Costa do Marfim', 'Curacao': 'Curaçao',
+};
+function sdbTeam(nome) {
+  return SPORTSDB_ALIAS[nome] || API_NAME_MAP[nome] || nome;
+}
+// status TheSportsDB → { status interno, overtime, penalties }
+function sdbStatus(s) {
+  const st = (s || '').toUpperCase();
+  if (['1H', '2H', 'ET', 'BT', 'P', 'LIVE', 'INPLAY'].includes(st)) return { status: 'IN_PLAY' };
+  if (st === 'HT') return { status: 'PAUSED' };
+  if (st === 'FT') return { status: 'FINISHED' };
+  if (st === 'AET') return { status: 'FINISHED', overtime: true };
+  if (['PEN', 'AP'].includes(st)) return { status: 'FINISHED', penalties: true };
+  return null; // NS, PST, etc → não mexe
+}
+
+async function syncSportsDB() {
+  // Janela de 3 dias UTC para pegar jogos que viram a meia-noite
+  const dias = [-1, 0, 1].map(off => new Date(Date.now() + off * 86400000).toISOString().slice(0, 10));
+  const eventos = [];
+  for (const d of dias) {
+    let data;
+    try {
+      const res = await fetch(`https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=${d}&l=4429`, { signal: AbortSignal.timeout(6000) });
+      if (!res.ok) continue;
+      data = await res.json();
+    } catch { continue; } // best-effort
+    for (const e of data.events || []) eventos.push(e);
   }
-  const games = data.games || [];
-  if (!games.length) return 0;
+  if (!eventos.length) return 0;
 
   let updated = 0;
-  for (const m of games) {
-    // Sinal confiável da worldcup26: só conta se o jogo começou ou terminou
-    if (!m.time_elapsed || m.time_elapsed === 'notstarted') continue;
+  for (const e of eventos) {
+    const info = sdbStatus(e.strStatus);
+    if (!info) continue; // jogo não começou ou estado irrelevante
 
-    const t1 = API_NAME_MAP[m.home_team_name_en] || m.home_team_name_en;
-    const t2 = API_NAME_MAP[m.away_team_name_en] || m.away_team_name_en;
+    const t1 = sdbTeam(e.strHomeTeam);
+    const t2 = sdbTeam(e.strAwayTeam);
     const jogoId = JOGOS_MAP[`${t1}|${t2}`];
     if (!jogoId) continue;
 
-    const g1 = parseInt(m.home_score);
-    const g2 = parseInt(m.away_score);
+    // Status (ao vivo / encerrado) — fonte confiável
+    await pool.query(
+      'INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2',
+      [jogoId, info.status]
+    );
+
+    const g1 = parseInt(e.intHomeScore);
+    const g2 = parseInt(e.intAwayScore);
     if (isNaN(g1) || isNaN(g2)) continue;
 
-    // Nunca sobrescreve 'manual'; só atualiza se o placar realmente mudou
+    // Placar — nunca sobrescreve 'manual'; só atualiza se mudou
     const r = await pool.query(
-      `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties, source) VALUES ($1, $2, $3, false, false, 'api')
+      `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties, source) VALUES ($1, $2, $3, $4, $5, 'api')
        ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, source = 'api'
        WHERE resultados.source IS DISTINCT FROM 'manual' AND (resultados.g1 <> $2 OR resultados.g2 <> $3)`,
-      [jogoId, g1, g2]
+      [jogoId, g1, g2, !!info.overtime, !!info.penalties]
     );
     if (r.rowCount) updated++;
   }
@@ -703,9 +736,9 @@ async function syncWorldCup26() {
 async function autoSync() {
   try {
     const updated = await doSync();
-    let wc = 0;
-    try { wc = await syncWorldCup26(); } catch (e) { /* fonte secundária: ignora */ }
-    console.log(`[auto-sync] ${new Date().toISOString()} — football-data: ${updated} | worldcup26: ${wc}`);
+    let sdb = 0;
+    try { sdb = await syncSportsDB(); } catch (e) { /* fonte secundária: ignora */ }
+    console.log(`[auto-sync] ${new Date().toISOString()} — football-data: ${updated} | thesportsdb: ${sdb}`);
   } catch (e) {
     console.error('[auto-sync] erro:', e.message);
   }
