@@ -646,6 +646,25 @@ function renderRanking() {
   document.getElementById('rankingList').innerHTML = h;
 }
 
+// Ordena os jogos por data/hora real (jogos sem horário definido vão para o fim)
+function jogosOrdenados() {
+  return [...JOGOS].sort((a, b) => {
+    const ka = parseGameTime(a.data, a.hora), kb = parseGameTime(b.data, b.hora);
+    if (ka && kb) return ka - kb;
+    if (ka) return -1;
+    if (kb) return 1;
+    return a.id - b.id;
+  });
+}
+const DIAS_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+const MES_NUM = { jan: 0, fev: 1, mar: 2, abr: 3, mai: 4, jun: 5, jul: 6 };
+function diaLabel(j) {
+  const m = j.data.match(/^(\d+)\/(\w+)$/);
+  if (!m || MES_NUM[m[2]] == null) return j.fase; // mata-mata sem data exata → mostra a fase
+  const wd = new Date(Date.UTC(2026, MES_NUM[m[2]], +m[1])).getUTCDay();
+  return `${DIAS_SEMANA[wd]} · ${j.data}`;
+}
+
 function renderPalpites() {
   const el = document.getElementById('palpitesContent');
   if (!currentPlayer) {
@@ -657,8 +676,8 @@ function renderPalpites() {
   const pal = state.palpites[p.id] || {};
   let h = `<div class="card" style="margin-bottom:1rem"><b>Palpites de ${p.nome}</b> — <span style="color:var(--text-muted);font-size:13px">Preencha antes do jogo começar</span></div>`;
   let fa = '';
-  JOGOS.forEach(j => {
-    if (j.fase !== fa) { fa = j.fase; h += `<div class="fase-label">${j.fase}</div>`; }
+  jogosOrdenados().forEach(j => {
+    if (j.data !== fa) { fa = j.data; h += `<div class="fase-label">${diaLabel(j)}</div>`; }
     const r = state.resultados[j.id];
     const pp = pal[j.id];
     const timeLocked = isGameLocked(j);
@@ -680,7 +699,7 @@ function renderPalpites() {
     const v1 = pp != null ? pp.g1 : '';
     const v2 = pp != null ? pp.g2 : '';
     h += `<div class="palpite-card"><div class="palpite-meta">
-      <span style="font-size:11px;color:var(--text-muted)">${j.data} ${j.hora}</span>${badge}</div>
+      <span style="font-size:11px;color:var(--text-muted)">${j.data} ${j.hora} · ${j.fase.replace('1ª Rodada — ','').replace('2ª Rodada — ','').replace('3ª Rodada — ','')}</span>${badge}</div>
       <div class="palpite-teams">
         <span class="palpite-team">${flag(j.time1,20)} ${j.time1}</span>
         <input type="number" min="0" max="20" class="score-inp" value="${v1}" placeholder="–" ${bloq ? 'disabled' : ''} onchange="savePalpite(${p.id},${j.id},0,this.value)">
@@ -767,8 +786,8 @@ function toggleJogoStats(jid) {
 
 function renderJogos() {
   let h = ''; let fa = '';
-  JOGOS.forEach(j => {
-    if (j.fase !== fa) { fa = j.fase; h += `<div class="fase-label">${j.fase}</div>`; }
+  jogosOrdenados().forEach(j => {
+    if (j.data !== fa) { fa = j.data; h += `<div class="fase-label">${diaLabel(j)}</div>`; }
     const r = state.resultados[j.id];
     const live = isLive(j.id);
     const open = openJogoStats === j.id;
@@ -784,7 +803,7 @@ function renderJogos() {
           : `<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:6px">🔒 Os palpites da galera aparecem <b>1h antes</b> do jogo começar</div>`}</div>`
       : '';
     h += `<div class="jogo-card clickable ${live ? 'live' : ''}" onclick="toggleJogoStats(${j.id})"><div class="jogo-meta">
-      <span style="font-size:11px;color:var(--text-muted);background:var(--bg);padding:2px 8px;border-radius:4px">${j.data} ${j.hora}</span>
+      <span style="font-size:11px;color:var(--text-muted);background:var(--bg);padding:2px 8px;border-radius:4px">${j.data} ${j.hora} · ${j.fase.replace('1ª Rodada — ','').replace('2ª Rodada — ','').replace('3ª Rodada — ','')}</span>
       ${statusBadge}</div>
       <div class="jogo-teams">
         <span class="jogo-team">${flag(j.time1)} ${j.time1}</span>
@@ -815,8 +834,8 @@ function renderAdmin() {
     }
   }
   let h = ''; let fa = '';
-  JOGOS.forEach(j => {
-    if (j.fase !== fa) { fa = j.fase; h += `<div class="fase-label">${j.fase}</div>`; }
+  jogosOrdenados().forEach(j => {
+    if (j.data !== fa) { fa = j.data; h += `<div class="fase-label">${diaLabel(j)}</div>`; }
     const r = state.resultados[j.id];
     const g1 = r != null ? r.g1 : '';
     const g2 = r != null ? r.g2 : '';
@@ -825,7 +844,7 @@ function renderAdmin() {
     const chkOT = r?.overtime ? 'checked' : '';
     const chkPen = r?.penalties ? 'checked' : '';
     h += `<div class="admin-card">
-      <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">${j.data} ${j.hora}
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">${j.data} ${j.hora} · ${j.fase.replace('1ª Rodada — ','').replace('2ª Rodada — ','').replace('3ª Rodada — ','')}
         ${live ? `<span class="badge badge-live" style="margin-left:6px">● Ao vivo</span>` : ''}
         ${r && !live ? `<span class="badge badge-green" style="margin-left:6px">✓ Salvo</span>` : ''}
       </div>
