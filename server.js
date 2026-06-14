@@ -684,6 +684,63 @@ function sdbStatus(s) {
   return null; // NS, PST, etc → não mexe
 }
 
+// ===== ODDS DO MERCADO (ESPN / DraftKings) → probabilidade =====
+const ESPN_ALIAS = {
+  'Türkiye': 'Turquia', 'Turkey': 'Turquia', 'USA': 'Estados Unidos', 'United States': 'Estados Unidos',
+  'IR Iran': 'Irã', 'Iran': 'Irã', 'Korea Republic': 'Coreia do Sul', 'South Korea': 'Coreia do Sul',
+  'Czechia': 'Rep. Tcheca', 'Czech Republic': 'Rep. Tcheca', 'Bosnia & Herzegovina': 'Bósnia-Herz.',
+  'Bosnia and Herzegovina': 'Bósnia-Herz.', 'Cape Verde': 'Cabo Verde', "Côte d'Ivoire": 'Costa do Marfim',
+  'Ivory Coast': 'Costa do Marfim', 'DR Congo': 'Congo (RD)', 'Curaçao': 'Curaçao',
+};
+function espnTeam(n) { return ESPN_ALIAS[n] || API_NAME_MAP[n] || n; }
+function mlProb(ml) { return ml > 0 ? 100 / (ml + 100) : (-ml) / ((-ml) + 100); } // odd americana → prob
+
+let oddsCache = { at: 0, data: {} };
+
+async function fetchEspnOdds() {
+  const dts = [-1, 0, 1].map(off => new Date(Date.now() + off * 86400000).toISOString().slice(0, 10).replace(/-/g, ''));
+  const odds = {};
+  for (const dt of dts) {
+    let data;
+    try {
+      const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${dt}`, { signal: AbortSignal.timeout(6000) });
+      if (!res.ok) continue;
+      data = await res.json();
+    } catch { continue; }
+    for (const ev of data.events || []) {
+      const comp = ev.competitions?.[0];
+      const o = comp && Array.isArray(comp.odds) ? comp.odds[0] : null;
+      if (!o || o.homeTeamOdds?.moneyLine == null || o.awayTeamOdds?.moneyLine == null || o.drawOdds?.moneyLine == null) continue;
+      const homeC = (comp.competitors || []).find(c => c.homeAway === 'home');
+      const awayC = (comp.competitors || []).find(c => c.homeAway === 'away');
+      if (!homeC || !awayC) continue;
+      const homeNome = espnTeam(homeC.team?.displayName || homeC.team?.name);
+      const awayNome = espnTeam(awayC.team?.displayName || awayC.team?.name);
+      const ph = mlProb(o.homeTeamOdds.moneyLine), pd = mlProb(o.drawOdds.moneyLine), pa = mlProb(o.awayTeamOdds.moneyLine);
+      const s = ph + pd + pa;
+      const Ph = Math.round(ph / s * 100), Pd = Math.round(pd / s * 100), Pa = 100 - Ph - Pd;
+      // Casa o jogo respeitando a ordem time1/time2 do bolão
+      let jid = JOGOS_MAP[`${homeNome}|${awayNome}`];
+      if (jid) { odds[jid] = { p1: Ph, pe: Pd, p2: Pa }; continue; }
+      jid = JOGOS_MAP[`${awayNome}|${homeNome}`];
+      if (jid) { odds[jid] = { p1: Pa, pe: Pd, p2: Ph }; }
+    }
+  }
+  return odds;
+}
+
+app.get('/api/odds', async (req, res) => {
+  if (Date.now() - oddsCache.at > 30 * 60 * 1000) {
+    try {
+      const fresh = await fetchEspnOdds();
+      // Só sobrescreve se veio algo; senão mantém a última odd conhecida (ESPN é intermitente)
+      if (Object.keys(fresh).length) oddsCache = { at: Date.now(), data: fresh };
+      else oddsCache.at = Date.now();
+    } catch { /* mantém cache antigo */ }
+  }
+  res.json(oddsCache.data);
+});
+
 async function syncSportsDB() {
   // Janela de 3 dias UTC para pegar jogos que viram a meia-noite
   const dias = [-1, 0, 1].map(off => new Date(Date.now() + off * 86400000).toISOString().slice(0, 10));

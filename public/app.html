@@ -465,6 +465,14 @@ let currentIsAdmin = false;
 let currentCampeao = null; // user's own pick (irreversible once set)
 let currentCanPickCampeao = false; // server decides: before deadline OR late entrant
 let pendingCampeao = null; // selected but not yet confirmed
+let marketOdds = {}; // { jogoId: { p1, pe, p2 } } probabilidade do mercado (ESPN)
+
+async function loadOdds() {
+  try {
+    const r = await fetch('/api/odds');
+    if (r.ok) { marketOdds = await r.json(); renderPalpites(); }
+  } catch {}
+}
 
 // ===== AUTH =====
 async function loadCurrentUser() {
@@ -709,9 +717,28 @@ function renderPalpites() {
         <span class="score-vs">×</span>
         <input type="number" min="0" max="20" class="score-inp" value="${v2}" placeholder="–" ${bloq ? 'disabled' : ''} onchange="savePalpite(${p.id},${j.id},1,this.value)">
         <span class="palpite-team right">${flag(j.time2,20)} ${j.time2}</span>
-      </div>${r ? `<div class="result-line">${flag(j.time1,16)} ${j.time1} ${r.g1} × ${r.g2} ${j.time2} ${flag(j.time2,16)}</div>` : ''}</div>`;
+      </div>${marketBar(j)}${r ? `<div class="result-line">${flag(j.time1,16)} ${j.time1} ${r.g1} × ${r.g2} ${j.time2} ${flag(j.time2,16)}</div>` : ''}</div>`;
   });
   el.innerHTML = h;
+}
+
+// Barra de probabilidade do mercado (só aparece quando há odds — jogos do dia)
+function marketBar(j) {
+  const od = marketOdds[j.id];
+  if (!od) return '';
+  const seg = (w, cor, txt) => `<div style="width:${w}%;background:${cor};color:#fff;display:flex;align-items:center;justify-content:center;${w < 9 ? 'font-size:0' : ''}">${txt}</div>`;
+  return `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+      <span style="font-size:9px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#9ca3af">Probabilidade do mercado</span>
+      <span style="font-size:9px;color:#b0b4bb">via ESPN</span>
+    </div>
+    <div style="display:flex;height:20px;border-radius:6px;overflow:hidden;font-size:10px;font-weight:700">
+      ${seg(od.p1, 'var(--green-dark)', od.p1 + '%')}${seg(od.pe, '#9ca3af', od.pe + '%')}${seg(od.p2, '#1a56c4', od.p2 + '%')}
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:9px;color:var(--text-muted)">
+      <span>${j.time1}</span><span>empate</span><span>${j.time2}</span>
+    </div>
+  </div>`;
 }
 
 // Distribuição dos palpites: % vitória time1, empate, vitória time2
@@ -1310,6 +1337,8 @@ function switchTab(id, btn) {
 (async () => {
   await loadCurrentUser();
   connectSSE();
+  loadOdds();
+  setInterval(loadOdds, 15 * 60 * 1000); // atualiza odds a cada 15 min
 })();
 </script>
 </body>
