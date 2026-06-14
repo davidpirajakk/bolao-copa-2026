@@ -188,6 +188,7 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
     <button class="nav-btn active" onclick="switchTab('ranking',this)">🏆 Ranking</button>
     <button class="nav-btn" onclick="switchTab('palpites',this)">✏️ Palpites</button>
     <button class="nav-btn" onclick="switchTab('jogos',this)">📅 Jogos</button>
+    <button class="nav-btn" onclick="switchTab('estatistica',this)">📊 Estatística</button>
     <button class="nav-btn" id="adminTab" onclick="switchTab('admin',this)">⚙️ Admin</button>
     <button class="nav-btn" id="campeaoTab" onclick="switchTab('campeao',this)">🏆 Campeão</button>
     <button class="nav-btn" onclick="switchTab('regras',this)">📋 Regras</button>
@@ -214,6 +215,7 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
 
   <div id="sec-palpites" class="section"><div id="palpitesContent"></div></div>
   <div id="sec-jogos" class="section"><div id="jogosList"></div></div>
+  <div id="sec-estatistica" class="section"><div id="estatisticaContent"></div></div>
 
   <div id="sec-admin" class="section">
     <div class="api-box" id="apiBox">
@@ -508,6 +510,7 @@ function connectSSE() {
     renderRanking();
     renderJogos();
     renderCampeao();
+    renderEstatistica();
     if (!focusedInPalpites) renderPalpites();
     if (!focusedInAdmin) renderAdmin();
   };
@@ -1041,6 +1044,103 @@ const SELECOES = [
   'Tunísia','Turquia','Uruguai','Uzbequistão','África do Sul','Argélia',
 ].sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
 
+// ===== ESTATÍSTICA =====
+function jogosEncerrados() {
+  return JOGOS.filter(j => state.resultados[j.id] && !isLive(j.id));
+}
+function pontosNoConjunto(pid, jogos) {
+  let pts = 0;
+  jogos.forEach(j => {
+    const r = state.resultados[j.id];
+    const pal = (state.palpites[String(pid)] || {})[j.id];
+    if (r && !isLive(j.id) && pal) pts += scoreGame(pal, r, j).pts;
+  });
+  return pts;
+}
+// Posições do ranking considerando só os jogos que passam no filtro
+function posicoesRanking(incluiJogo) {
+  const jogos = jogosEncerrados().filter(incluiJogo);
+  const arr = state.players.map(p => ({ id: p.id, nome: p.nome, pts: pontosNoConjunto(p.id, jogos) }))
+    .sort((a, b) => b.pts - a.pts);
+  const pos = {};
+  let lastPts = null, lastPos = 0;
+  arr.forEach((x, i) => { if (x.pts !== lastPts) { lastPos = i + 1; lastPts = x.pts; } pos[x.id] = lastPos; });
+  return pos;
+}
+
+function renderEstatistica() {
+  const el = document.getElementById('estatisticaContent');
+  if (!el) return;
+  const fin = jogosEncerrados();
+  if (!fin.length) {
+    el.innerHTML = `<div class="card"><div class="empty">📊 As estatísticas aparecem assim que os primeiros jogos terminarem.</div></div>`;
+    return;
+  }
+  // Dia mais recente com jogo encerrado
+  const ordenados = [...fin].sort((a, b) => (parseGameTime(b.data, b.hora) || 0) - (parseGameTime(a.data, a.hora) || 0));
+  const diaRecente = ordenados[0].data;
+  const jogosDoDia = fin.filter(j => j.data === diaRecente);
+
+  // CRAQUE DO DIA
+  const craques = state.players.map(p => ({ id: p.id, nome: p.nome, idx: state.players.indexOf(p), pts: pontosNoConjunto(p.id, jogosDoDia) }))
+    .filter(x => x.pts > 0).sort((a, b) => b.pts - a.pts);
+  const medals = ['🥇', '🥈', '🥉'];
+  let craqueHtml;
+  if (!craques.length) {
+    craqueHtml = `<div style="font-size:13px;color:var(--text-muted);padding:6px">Ninguém pontuou nos jogos de ${diaRecente}.</div>`;
+  } else {
+    craqueHtml = craques.slice(0, 5).map((x, i) => `
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid #f3f4f6">
+        <div style="width:24px;text-align:center;font-size:16px">${medals[i] || (i + 1)}</div>
+        <div class="avatar" style="${avatarStyle(x.idx)};width:32px;height:32px;font-size:11px">${initials(x.nome)}</div>
+        <div style="flex:1;font-weight:${i === 0 ? '700' : '500'};font-size:14px">${x.nome}${x.id === currentPlayer ? ' <span style="font-size:9px;background:#007a3d;color:#fff;padding:1px 5px;border-radius:4px">você</span>' : ''}</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--green-dark)">${x.pts} pts</div>
+      </div>`).join('');
+  }
+
+  // EVOLUÇÃO — compara ranking COM e SEM os jogos do dia mais recente
+  const houveAntes = fin.some(j => j.data !== diaRecente);
+  let evoHtml;
+  if (!houveAntes) {
+    evoHtml = `<div style="font-size:13px;color:var(--text-muted);padding:6px">A evolução aparece a partir do <b>segundo dia</b> de jogos encerrados.</div>`;
+  } else {
+    const posDepois = posicoesRanking(() => true);
+    const posAntes = posicoesRanking(j => j.data !== diaRecente);
+    const mov = state.players.map(p => ({
+      id: p.id, nome: p.nome, idx: state.players.indexOf(p),
+      antes: posAntes[p.id], depois: posDepois[p.id], delta: posAntes[p.id] - posDepois[p.id]
+    }));
+    const subiu = [...mov].filter(x => x.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 3);
+    const caiu = [...mov].filter(x => x.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 3);
+    const linha = (x, cor, seta) => `
+      <div style="display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid #f3f4f6">
+        <div style="font-size:15px">${seta}</div>
+        <div class="avatar" style="${avatarStyle(x.idx)};width:30px;height:30px;font-size:11px">${initials(x.nome)}</div>
+        <div style="flex:1;font-weight:500;font-size:14px">${x.nome}${x.id === currentPlayer ? ' <span style="font-size:9px;background:#007a3d;color:#fff;padding:1px 5px;border-radius:4px">você</span>' : ''}</div>
+        <div style="text-align:right">
+          <div style="font-weight:700;font-size:14px;color:${cor}">${x.delta > 0 ? '+' + x.delta : x.delta} ${Math.abs(x.delta) === 1 ? 'posição' : 'posições'}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${x.antes}º → ${x.depois}º</div>
+        </div>
+      </div>`;
+    evoHtml = `
+      <div style="font-size:12px;font-weight:700;color:var(--green-dark);margin:4px 0 4px">⬆️ Quem mais subiu</div>
+      ${subiu.length ? subiu.map(x => linha(x, 'var(--green-dark)', '⬆️')).join('') : '<div style="font-size:12px;color:var(--text-muted);padding:4px">Ninguém subiu posição.</div>'}
+      <div style="font-size:12px;font-weight:700;color:var(--red);margin:14px 0 4px">⬇️ Quem mais caiu</div>
+      ${caiu.length ? caiu.map(x => linha(x, 'var(--red)', '⬇️')).join('') : '<div style="font-size:12px;color:var(--text-muted);padding:4px">Ninguém caiu posição.</div>'}`;
+  }
+
+  el.innerHTML = `
+    <div class="card">
+      <b style="font-size:15px">🏅 Craque do dia <span style="font-weight:400;color:var(--text-muted);font-size:13px">— ${diaLabel({ data: diaRecente, hora: jogosDoDia[0].hora, fase: '' })}</span></b>
+      <div style="margin-top:10px">${craqueHtml}</div>
+    </div>
+    <div class="card">
+      <b style="font-size:15px">📈 Evolução no ranking</b>
+      <div style="font-size:11px;color:var(--text-muted);margin:4px 0 10px">Mudança de posição após os jogos de ${diaRecente}</div>
+      ${evoHtml}
+    </div>`;
+}
+
 const CAMPEAO_LOCK = new Date(Date.UTC(2026, 5, 11, 18, 0)); // 11/jun 15h BRT = 18h UTC
 function isCampeaoLocked() { return Date.now() >= CAMPEAO_LOCK.getTime(); }
 
@@ -1201,6 +1301,7 @@ function switchTab(id, btn) {
   if (id === 'palpites') renderPalpites();
   if (id === 'admin') renderAdmin();
   if (id === 'jogos') renderJogos();
+  if (id === 'estatistica') renderEstatistica();
   if (id === 'ranking') renderRanking();
   if (id === 'campeao') renderCampeao();
 }
