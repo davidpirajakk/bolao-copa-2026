@@ -1129,10 +1129,35 @@ function renderEstatistica() {
       ${caiu.length ? caiu.map(x => linha(x, 'var(--red)', '⬇️')).join('') : '<div style="font-size:12px;color:var(--text-muted);padding:4px">Ninguém caiu posição.</div>'}`;
   }
 
+  // MAIORES PONTUADORES POR DIA (histórico de todos os dias com jogo encerrado)
+  const diasMap = {};
+  fin.forEach(j => { (diasMap[j.data] = diasMap[j.data] || []).push(j); });
+  const diasOrd = Object.keys(diasMap).sort((a, b) =>
+    (parseGameTime(diasMap[b][0].data, diasMap[b][0].hora) || 0) - (parseGameTime(diasMap[a][0].data, diasMap[a][0].hora) || 0));
+  const porDiaHtml = diasOrd.map(dia => {
+    const jogosDia = diasMap[dia];
+    const pts = state.players.map(p => ({ nome: p.nome, id: p.id, pts: pontosNoConjunto(p.id, jogosDia) }));
+    const max = pts.reduce((m, x) => Math.max(m, x.pts), 0);
+    const venc = max > 0 ? pts.filter(x => x.pts === max) : [];
+    const nomes = venc.length
+      ? venc.map(x => `${x.nome}${x.id === currentPlayer ? ' <span style="font-size:9px;background:#007a3d;color:#fff;padding:0 5px;border-radius:4px">você</span>' : ''}`).join(', ')
+      : '<span style="color:var(--text-muted)">ninguém pontuou</span>';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid #f3f4f6">
+      <div style="font-size:11px;color:var(--text-muted);width:104px;flex-shrink:0">${diaLabel({ data: dia, hora: jogosDia[0].hora, fase: '' })}</div>
+      <div style="flex:1;font-weight:500;font-size:13px;line-height:1.3">${nomes}</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--green-dark);flex-shrink:0">${max} pts</div>
+    </div>`;
+  }).join('');
+
   el.innerHTML = `
     <div class="card">
       <b style="font-size:15px">🏅 Craque do dia <span style="font-weight:400;color:var(--text-muted);font-size:13px">— ${diaLabel({ data: diaRecente, hora: jogosDoDia[0].hora, fase: '' })}</span></b>
       <div style="margin-top:10px">${craqueHtml}</div>
+    </div>
+    <div class="card">
+      <b style="font-size:15px">🏆 Maiores pontuadores por dia</b>
+      <div style="font-size:11px;color:var(--text-muted);margin:4px 0 8px">Quem mais pontuou em cada dia de jogos</div>
+      ${porDiaHtml}
     </div>
     <div class="card">
       <b style="font-size:15px">📈 Evolução no ranking</b>
