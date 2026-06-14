@@ -729,13 +729,55 @@ async function fetchEspnOdds() {
   return odds;
 }
 
-app.get('/api/odds', async (req, res) => {
-  if (Date.now() - oddsCache.at > 30 * 60 * 1000) {
+// The Odds API (confiável) — usada se ODDS_API_KEY estiver configurada
+let resolvedSportKey = null;
+async function fetchOddsApi() {
+  const key = process.env.ODDS_API_KEY;
+  if (!key) return null;
+  if (!resolvedSportKey) {
     try {
-      const fresh = await fetchEspnOdds();
-      // Só sobrescreve se veio algo; senão mantém a última odd conhecida (ESPN é intermitente)
-      if (Object.keys(fresh).length) oddsCache = { at: Date.now(), data: fresh };
-      else oddsCache.at = Date.now();
+      const sres = await fetch(`https://api.the-odds-api.com/v4/sports/?apiKey=${key}`, { signal: AbortSignal.timeout(6000) });
+      if (sres.ok) {
+        const sports = await sres.json();
+        const wc = (sports || []).find(s => /world.?cup/i.test(s.key) || /world cup/i.test(s.title || ''));
+        resolvedSportKey = wc ? wc.key : 'soccer_fifa_world_cup';
+      }
+    } catch { resolvedSportKey = 'soccer_fifa_world_cup'; }
+  }
+  let games;
+  try {
+    const res = await fetch(`https://api.the-odds-api.com/v4/sports/${resolvedSportKey}/odds/?apiKey=${key}&regions=us,eu&markets=h2h&oddsFormat=decimal`, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return {};
+    games = await res.json();
+  } catch { return {}; }
+  const odds = {};
+  for (const g of games || []) {
+    const bm = (g.bookmakers || [])[0];
+    const mk = bm && (bm.markets || []).find(m => m.key === 'h2h');
+    if (!mk) continue;
+    const oc = {};
+    for (const o of mk.outcomes || []) oc[o.name] = o.price;
+    const dh = oc[g.home_team], da = oc[g.away_team], dd = oc['Draw'];
+    if (!dh || !da || !dd) continue;
+    const home = espnTeam(g.home_team), away = espnTeam(g.away_team);
+    const ph = 1 / dh, pa = 1 / da, pd = 1 / dd, s = ph + pa + pd;
+    const Ph = Math.round(ph / s * 100), Pd = Math.round(pd / s * 100), Pa = 100 - Ph - Pd;
+    let jid = JOGOS_MAP[`${home}|${away}`];
+    if (jid) { odds[jid] = { p1: Ph, pe: Pd, p2: Pa }; continue; }
+    jid = JOGOS_MAP[`${away}|${home}`];
+    if (jid) { odds[jid] = { p1: Pa, pe: Pd, p2: Ph }; }
+  }
+  return odds;
+}
+
+app.get('/api/odds', async (req, res) => {
+  // The Odds API tem quota baixa (500/mês) → cache de 3h. ESPN é fallback.
+  if (Date.now() - oddsCache.at > 3 * 60 * 60 * 1000) {
+    try {
+      let fresh = await fetchOddsApi();          // confiável (se houver chave)
+      if (!fresh || !Object.keys(fresh).length) fresh = await fetchEspnOdds(); // reserva
+      if (fresh && Object.keys(fresh).length) oddsCache = { at: Date.now(), data: fresh };
+      else oddsCache.at = Date.now();            // mantém última odd conhecida
     } catch { /* mantém cache antigo */ }
   }
   res.json(oddsCache.data);
