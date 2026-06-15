@@ -1217,6 +1217,26 @@ function renderEstatistica() {
       </div>`).join('');
   }
 
+  // PIORES DO DIA — quem menos pontuou entre quem palpitou no dia
+  const participantesDia = state.players.map(p => {
+    let temPalpite = false;
+    jogosDoDia.forEach(j => { if ((state.palpites[String(p.id)] || {})[j.id]) temPalpite = true; });
+    return { id: p.id, nome: p.nome, idx: state.players.indexOf(p), pts: pontosNoConjunto(p.id, jogosDoDia), temPalpite };
+  }).filter(x => x.temPalpite);
+  const piores = [...participantesDia].sort((a, b) => a.pts - b.pts).slice(0, 5);
+  let pioresHtml;
+  if (!piores.length) {
+    pioresHtml = `<div style="font-size:13px;color:var(--text-muted);padding:6px">Ninguém palpitou nos jogos de ${diaRecente}.</div>`;
+  } else {
+    pioresHtml = piores.map((x, i) => `
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid #f3f4f6">
+        <div style="width:24px;text-align:center;font-size:16px">${i === 0 ? '🥄' : (i + 1)}</div>
+        <div class="avatar" style="${avatarStyle(x.idx)};width:32px;height:32px;font-size:11px">${initials(x.nome)}</div>
+        <div style="flex:1;font-weight:${i === 0 ? '700' : '500'};font-size:14px">${x.nome}${x.id === currentPlayer ? ' <span style="font-size:9px;background:#007a3d;color:#fff;padding:1px 5px;border-radius:4px">você</span>' : ''}</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--red)">${x.pts} pts</div>
+      </div>`).join('');
+  }
+
   // EVOLUÇÃO — compara ranking COM e SEM os jogos do dia mais recente
   const houveAntes = fin.some(j => j.data !== diaRecente);
   let evoHtml;
@@ -1272,6 +1292,10 @@ function renderEstatistica() {
     <div class="card">
       <b style="font-size:15px">🏅 Craque do dia <span style="font-weight:400;color:var(--text-muted);font-size:13px">— ${diaLabel({ data: diaRecente, hora: jogosDoDia[0].hora, fase: '' })}</span></b>
       <div style="margin-top:10px">${craqueHtml}</div>
+    </div>
+    <div class="card">
+      <b style="font-size:15px">🥄 Piores do dia <span style="font-weight:400;color:var(--text-muted);font-size:13px">— ${diaLabel({ data: diaRecente, hora: jogosDoDia[0].hora, fase: '' })}</span></b>
+      <div style="margin-top:10px">${pioresHtml}</div>
     </div>
     <div class="card">
       <b style="font-size:15px">🏆 Maiores pontuadores por dia</b>
