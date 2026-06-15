@@ -665,6 +665,35 @@ function renderRanking() {
 }
 
 // ===== MINI-PERFIL DO JOGADOR =====
+// Gráfico de linha (SVG) da posição por dia — 1º lugar no topo
+function histPosChart(hist) {
+  if (!hist.length) return '<div style="font-size:12px;color:var(--text-muted);padding:4px">Sem jogos encerrados ainda.</div>';
+  if (hist.length === 1) {
+    return `<div style="text-align:center;padding:10px"><span style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--green-dark)">${hist[0].pos}º</span> <span style="font-size:12px;color:var(--text-muted)">em ${hist[0].dia}</span></div>`;
+  }
+  const W = 340, H = 140, mL = 12, mR = 12, mT = 22, mB = 24;
+  const pw = W - mL - mR, ph = H - mT - mB, n = hist.length;
+  const ps = hist.map(h => h.pos);
+  let minP = Math.min(...ps), maxP = Math.max(...ps);
+  if (minP === maxP) { minP -= 1; maxP += 1; }
+  const x = i => mL + i * pw / (n - 1);
+  const y = pos => mT + (pos - minP) / (maxP - minP) * ph; // melhor (menor) em cima
+  const pts = hist.map((h, i) => `${x(i).toFixed(1)},${y(h.pos).toFixed(1)}`).join(' ');
+  const step = Math.ceil(n / 6);
+  let circles = '', labels = '', dates = '';
+  hist.forEach((h, i) => {
+    const cx = x(i), cy = y(h.pos);
+    circles += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3.5" fill="#006b35"/>`;
+    labels += `<text x="${cx.toFixed(1)}" y="${(cy - 7).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="#006b35">${h.pos}º</text>`;
+    if (i % step === 0 || i === n - 1) dates += `<text x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="9" fill="#9ca3af">${h.dia}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img" aria-label="Gráfico de posição por dia">
+    <polyline points="${pts}" fill="none" stroke="#00a651" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    ${circles}${labels}${dates}
+  </svg>
+  <div style="font-size:10px;color:var(--text-muted);text-align:center;margin-top:-2px">↑ posições melhores no topo</div>`;
+}
+
 function fecharPerfil() { document.getElementById('perfilModal').classList.remove('open'); }
 
 function abrirPerfil(pid) {
@@ -689,23 +718,11 @@ function abrirPerfil(pid) {
     return (parseGameTime(ja.data, ja.hora) || 0) - (parseGameTime(jb.data, jb.hora) || 0);
   });
   const acum = [];
-  let prevPos = null;
-  const histPosHtml = dias.map(dia => {
+  const histArr = dias.map(dia => {
     acum.push(dia);
-    const pos = posicoesRanking(j => acum.includes(j.data))[pid];
-    let trend = '';
-    if (prevPos != null) {
-      if (pos < prevPos) trend = `<span style="color:var(--green-dark);font-size:11px">⬆️ ${prevPos - pos}</span>`;
-      else if (pos > prevPos) trend = `<span style="color:var(--red);font-size:11px">⬇️ ${pos - prevPos}</span>`;
-      else trend = `<span style="color:var(--text-muted);font-size:11px">—</span>`;
-    }
-    prevPos = pos;
-    return `<div style="display:flex;align-items:center;gap:10px;padding:6px 4px;border-bottom:1px solid #f3f4f6">
-      <span style="font-size:11px;color:var(--text-muted);width:96px">${diaLabel({ data: dia, hora: fin.find(j => j.data === dia).hora, fase: '' })}</span>
-      <span style="flex:1;font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--green-dark)">${pos}º</span>
-      ${trend}
-    </div>`;
-  }).join('') || '<div style="font-size:12px;color:var(--text-muted);padding:4px">Sem jogos encerrados ainda.</div>';
+    return { dia, pos: posicoesRanking(j => acum.includes(j.data))[pid] };
+  });
+  const histPosHtml = histPosChart(histArr);
 
   // Histórico de palpites
   const ptColor = pts => pts >= 5 ? 'var(--green-dark)' : pts >= 3 ? '#1a56c4' : pts > 0 ? '#0097a7' : 'var(--text-muted)';
