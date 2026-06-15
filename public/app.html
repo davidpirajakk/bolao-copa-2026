@@ -714,7 +714,7 @@ function abrirPerfil(pid) {
     const r = state.resultados[j.id];
     const sc = pal ? scoreGame(pal, r, j) : null;
     return `<div style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid #f3f4f6;font-size:12px">
-      <span style="flex:1">${flag(j.time1, 14)} ${j.time1} <b>${r.g1}×${r.g2}</b> ${j.time2} ${flag(j.time2, 14)}</span>
+      <span style="flex:1">${flag(j.time1, 16)} ${j.time1} <b>${r.g1}×${r.g2}</b> ${j.time2} ${flag(j.time2, 16)}</span>
       <span style="color:var(--text-muted);width:54px;text-align:center">${pal ? pal.g1 + '×' + pal.g2 : '—'}</span>
       <span style="width:48px;text-align:right;font-weight:700;color:${ptColor(sc ? sc.pts : 0)}">${pal ? (sc.pts > 0 ? '+' + sc.pts : '0') : '–'}</span>
     </div>`;
