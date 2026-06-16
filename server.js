@@ -598,7 +598,7 @@ async function doSync() {
     if (!jogoId) continue;
 
     await pool.query(
-      'INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2 WHERE live_status.status IS DISTINCT FROM 'FINISHED'',
+      "INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2 WHERE live_status.status IS DISTINCT FROM 'FINISHED'",
       [jogoId, m.status]
     );
 
@@ -643,7 +643,7 @@ app.post('/api/sync', requireAdmin, async (req, res) => {
       if (!jogoId) continue;
 
       await pool.query(
-        'INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2 WHERE live_status.status IS DISTINCT FROM 'FINISHED'',
+        "INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2 WHERE live_status.status IS DISTINCT FROM 'FINISHED'",
         [jogoId, m.status]
       );
 
@@ -724,7 +724,7 @@ async function syncSportsDB() {
 
     // Status (ao vivo / encerrado) — fonte confiável
     await pool.query(
-      'INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2 WHERE live_status.status IS DISTINCT FROM 'FINISHED'',
+      "INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2 WHERE live_status.status IS DISTINCT FROM 'FINISHED'",
       [jogoId, info.status]
     );
 
