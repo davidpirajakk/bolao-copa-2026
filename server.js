@@ -458,6 +458,19 @@ app.delete('/api/results/:jogoId', requireAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 
+// Admin: marcar jogo como finalizado (ou reabrir)
+app.put('/api/finish/:jogoId', requireAdmin, async (req, res) => {
+  const jogoId = parseInt(req.params.jogoId);
+  if (isNaN(jogoId)) return res.status(400).json({ error: 'Jogo inválido' });
+  const status = req.body.finished === false ? 'TIMED' : 'FINISHED';
+  await pool.query(
+    'INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2',
+    [jogoId, status]
+  );
+  broadcast();
+  res.json({ ok: true, status });
+});
+
 app.put('/api/settings/campeao-real', requireAdmin, async (req, res) => {
   const campeao = (req.body.campeao || '').trim();
   if (!campeao) return res.status(400).json({ error: 'Seleção inválida' });
@@ -585,7 +598,7 @@ async function doSync() {
     if (!jogoId) continue;
 
     await pool.query(
-      'INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2',
+      'INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2 WHERE live_status.status IS DISTINCT FROM 'FINISHED'',
       [jogoId, m.status]
     );
 
@@ -630,7 +643,7 @@ app.post('/api/sync', requireAdmin, async (req, res) => {
       if (!jogoId) continue;
 
       await pool.query(
-        'INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2',
+        'INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2 WHERE live_status.status IS DISTINCT FROM 'FINISHED'',
         [jogoId, m.status]
       );
 
@@ -711,7 +724,7 @@ async function syncSportsDB() {
 
     // Status (ao vivo / encerrado) — fonte confiável
     await pool.query(
-      'INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2',
+      'INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2 WHERE live_status.status IS DISTINCT FROM 'FINISHED'',
       [jogoId, info.status]
     );
 

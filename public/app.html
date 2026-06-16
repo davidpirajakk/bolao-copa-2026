@@ -962,13 +962,14 @@ function renderAdmin() {
     const g1 = r != null ? r.g1 : '';
     const g2 = r != null ? r.g2 : '';
     const live = isLive(j.id);
+    const finished = state.liveStatus[j.id] === 'FINISHED';
     const isKnockout = j.id >= 73;
     const chkOT = r?.overtime ? 'checked' : '';
     const chkPen = r?.penalties ? 'checked' : '';
     h += `<div class="admin-card">
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">${j.data} ${j.hora} · ${j.fase.replace('1ª Rodada — ','').replace('2ª Rodada — ','').replace('3ª Rodada — ','')}
         ${live ? `<span class="badge badge-live" style="margin-left:6px">● Ao vivo</span>` : ''}
-        ${r && !live ? `<span class="badge badge-green" style="margin-left:6px">✓ Salvo</span>` : ''}
+        ${finished ? `<span class="badge badge-green" style="margin-left:6px">🏁 Finalizado</span>` : (r ? `<span class="badge badge-green" style="margin-left:6px">✓ Salvo</span>` : '')}
       </div>
       <div class="admin-row">
         <span class="admin-team">${flag(j.time1,20)} ${j.time1}</span>
@@ -978,6 +979,11 @@ function renderAdmin() {
         <span class="admin-team right">${j.time2} ${flag(j.time2,20)}</span>
         <button class="btn-save" onclick="saveResult(${j.id})">Salvar</button>
         ${r ? `<button onclick="deleteResult(${j.id})" style="background:none;border:1px solid #e63946;color:#e63946;border-radius:8px;padding:8px 10px;font-size:12px;cursor:pointer;white-space:nowrap" title="Apagar resultado">🗑️</button>` : ''}
+      </div>
+      <div style="margin-top:8px">
+        ${finished
+          ? `<button onclick="finalizarJogo(${j.id},false)" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer">↩️ Reabrir jogo</button>`
+          : `<button onclick="finalizarJogo(${j.id},true)" style="background:none;border:1px solid var(--green-mid);color:var(--green-dark);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;font-weight:600">🏁 Finalizar jogo</button>`}
       </div>
       ${isKnockout ? `<div style="display:flex;gap:16px;margin-top:10px;font-size:13px;color:var(--text-muted)">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
@@ -1009,6 +1015,14 @@ async function savePalpite(pid, jid, slot, val) {
 async function deleteResult(jid) {
   if (!confirm('Apagar o resultado deste jogo?')) return;
   await fetch(`/api/results/${jid}`, { method: 'DELETE' });
+}
+
+async function finalizarJogo(jid, finished) {
+  await fetch(`/api/finish/${jid}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ finished })
+  });
 }
 
 async function saveResult(jid) {
