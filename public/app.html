@@ -344,6 +344,7 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
   <div class="modal-box" id="perfilBox"></div>
 </div>
 
+<script src="/jogos.js"></script>
 <script>
 // ===== BANDEIRAS =====
 const FLAG_CODES={
@@ -367,87 +368,7 @@ function flag(t,sz){
   return `<img src="https://flagcdn.com/${s}x${Math.round(s*0.75)}/${code}.png" alt="${t}" title="${t}" style="width:${s}px;height:${Math.round(s*0.75)}px;object-fit:cover;border-radius:2px;vertical-align:middle;display:inline-block">`;
 }
 
-// ===== JOGOS =====
-const JOGOS=[
-  {id:1,fase:'1ª Rodada — Grupo A',data:'11/jun',hora:'16h',time1:'México',time2:'África do Sul'},
-  {id:2,fase:'1ª Rodada — Grupo A',data:'11/jun',hora:'23h',time1:'Coreia do Sul',time2:'Rep. Tcheca'},
-  {id:3,fase:'1ª Rodada — Grupo B',data:'12/jun',hora:'16h',time1:'Canadá',time2:'Bósnia-Herz.'},
-  {id:4,fase:'1ª Rodada — Grupo D',data:'12/jun',hora:'22h',time1:'Estados Unidos',time2:'Paraguai'},
-  {id:5,fase:'1ª Rodada — Grupo D',data:'14/jun',hora:'01h',time1:'Austrália',time2:'Turquia'},
-  {id:6,fase:'1ª Rodada — Grupo B',data:'13/jun',hora:'16h',time1:'Catar',time2:'Suíça'},
-  {id:7,fase:'1ª Rodada — Grupo C',data:'13/jun',hora:'19h',time1:'Brasil',time2:'Marrocos'},
-  {id:8,fase:'1ª Rodada — Grupo C',data:'13/jun',hora:'22h',time1:'Haiti',time2:'Escócia'},
-  {id:9,fase:'1ª Rodada — Grupo E',data:'14/jun',hora:'14h',time1:'Alemanha',time2:'Curaçao'},
-  {id:10,fase:'1ª Rodada — Grupo F',data:'14/jun',hora:'17h',time1:'Holanda',time2:'Japão'},
-  {id:11,fase:'1ª Rodada — Grupo E',data:'14/jun',hora:'20h',time1:'Costa do Marfim',time2:'Equador'},
-  {id:12,fase:'1ª Rodada — Grupo F',data:'14/jun',hora:'23h',time1:'Suécia',time2:'Tunísia'},
-  {id:13,fase:'1ª Rodada — Grupo H',data:'15/jun',hora:'13h',time1:'Espanha',time2:'Cabo Verde'},
-  {id:14,fase:'1ª Rodada — Grupo G',data:'15/jun',hora:'16h',time1:'Bélgica',time2:'Egito'},
-  {id:15,fase:'1ª Rodada — Grupo H',data:'15/jun',hora:'19h',time1:'Arábia Saudita',time2:'Uruguai'},
-  {id:16,fase:'1ª Rodada — Grupo G',data:'15/jun',hora:'22h',time1:'Irã',time2:'Nova Zelândia'},
-  {id:17,fase:'1ª Rodada — Grupo J',data:'17/jun',hora:'01h',time1:'Áustria',time2:'Jordânia'},
-  {id:18,fase:'1ª Rodada — Grupo I',data:'16/jun',hora:'16h',time1:'França',time2:'Senegal'},
-  {id:19,fase:'1ª Rodada — Grupo I',data:'16/jun',hora:'19h',time1:'Iraque',time2:'Noruega'},
-  {id:20,fase:'1ª Rodada — Grupo J',data:'16/jun',hora:'22h',time1:'Argentina',time2:'Argélia'},
-  {id:21,fase:'1ª Rodada — Grupo K',data:'17/jun',hora:'14h',time1:'Portugal',time2:'Congo (RD)'},
-  {id:22,fase:'1ª Rodada — Grupo L',data:'17/jun',hora:'17h',time1:'Inglaterra',time2:'Croácia'},
-  {id:23,fase:'1ª Rodada — Grupo L',data:'17/jun',hora:'20h',time1:'Gana',time2:'Panamá'},
-  {id:24,fase:'1ª Rodada — Grupo K',data:'17/jun',hora:'23h',time1:'Uzbequistão',time2:'Colômbia'},
-  {id:25,fase:'2ª Rodada — Grupo A',data:'18/jun',hora:'13h',time1:'Rep. Tcheca',time2:'África do Sul'},
-  {id:26,fase:'2ª Rodada — Grupo B',data:'18/jun',hora:'16h',time1:'Suíça',time2:'Bósnia-Herz.'},
-  {id:27,fase:'2ª Rodada — Grupo B',data:'18/jun',hora:'19h',time1:'Canadá',time2:'Catar'},
-  {id:28,fase:'2ª Rodada — Grupo A',data:'18/jun',hora:'22h',time1:'México',time2:'Coreia do Sul'},
-  {id:29,fase:'2ª Rodada — Grupo D',data:'20/jun',hora:'00h',time1:'Turquia',time2:'Paraguai'},
-  {id:30,fase:'2ª Rodada — Grupo D',data:'19/jun',hora:'16h',time1:'Estados Unidos',time2:'Austrália'},
-  {id:31,fase:'2ª Rodada — Grupo C',data:'19/jun',hora:'19h',time1:'Escócia',time2:'Marrocos'},
-  {id:32,fase:'2ª Rodada — Grupo C',data:'19/jun',hora:'21h30',time1:'Brasil',time2:'Haiti'},
-  {id:33,fase:'2ª Rodada — Grupo F',data:'21/jun',hora:'01h',time1:'Tunísia',time2:'Japão'},
-  {id:34,fase:'2ª Rodada — Grupo F',data:'20/jun',hora:'14h',time1:'Holanda',time2:'Suécia'},
-  {id:35,fase:'2ª Rodada — Grupo E',data:'20/jun',hora:'17h',time1:'Alemanha',time2:'Costa do Marfim'},
-  {id:36,fase:'2ª Rodada — Grupo E',data:'20/jun',hora:'21h',time1:'Equador',time2:'Curaçao'},
-  {id:37,fase:'2ª Rodada — Grupo H',data:'21/jun',hora:'13h',time1:'Espanha',time2:'Arábia Saudita'},
-  {id:38,fase:'2ª Rodada — Grupo G',data:'21/jun',hora:'16h',time1:'Bélgica',time2:'Irã'},
-  {id:39,fase:'2ª Rodada — Grupo H',data:'21/jun',hora:'19h',time1:'Uruguai',time2:'Cabo Verde'},
-  {id:40,fase:'2ª Rodada — Grupo G',data:'21/jun',hora:'22h',time1:'Nova Zelândia',time2:'Egito'},
-  {id:41,fase:'2ª Rodada — Grupo J',data:'23/jun',hora:'00h',time1:'Jordânia',time2:'Argélia'},
-  {id:42,fase:'2ª Rodada — Grupo J',data:'22/jun',hora:'14h',time1:'Argentina',time2:'Áustria'},
-  {id:43,fase:'2ª Rodada — Grupo I',data:'22/jun',hora:'18h',time1:'França',time2:'Iraque'},
-  {id:44,fase:'2ª Rodada — Grupo I',data:'22/jun',hora:'21h',time1:'Noruega',time2:'Senegal'},
-  {id:45,fase:'2ª Rodada — Grupo K',data:'23/jun',hora:'14h',time1:'Portugal',time2:'Uzbequistão'},
-  {id:46,fase:'2ª Rodada — Grupo L',data:'23/jun',hora:'17h',time1:'Inglaterra',time2:'Gana'},
-  {id:47,fase:'2ª Rodada — Grupo L',data:'23/jun',hora:'20h',time1:'Panamá',time2:'Croácia'},
-  {id:48,fase:'2ª Rodada — Grupo K',data:'23/jun',hora:'23h',time1:'Colômbia',time2:'Congo (RD)'},
-  {id:49,fase:'3ª Rodada — Grupo B',data:'24/jun',hora:'16h',time1:'Suíça',time2:'Canadá'},
-  {id:50,fase:'3ª Rodada — Grupo B',data:'24/jun',hora:'16h',time1:'Bósnia-Herz.',time2:'Catar'},
-  {id:51,fase:'3ª Rodada — Grupo C',data:'24/jun',hora:'19h',time1:'Escócia',time2:'Brasil'},
-  {id:52,fase:'3ª Rodada — Grupo C',data:'24/jun',hora:'19h',time1:'Marrocos',time2:'Haiti'},
-  {id:53,fase:'3ª Rodada — Grupo A',data:'24/jun',hora:'22h',time1:'Rep. Tcheca',time2:'México'},
-  {id:54,fase:'3ª Rodada — Grupo A',data:'24/jun',hora:'22h',time1:'África do Sul',time2:'Coreia do Sul'},
-  {id:55,fase:'3ª Rodada — Grupo E',data:'25/jun',hora:'17h',time1:'Curaçao',time2:'Costa do Marfim'},
-  {id:56,fase:'3ª Rodada — Grupo E',data:'25/jun',hora:'17h',time1:'Equador',time2:'Alemanha'},
-  {id:57,fase:'3ª Rodada — Grupo F',data:'25/jun',hora:'20h',time1:'Japão',time2:'Suécia'},
-  {id:58,fase:'3ª Rodada — Grupo F',data:'25/jun',hora:'20h',time1:'Tunísia',time2:'Holanda'},
-  {id:59,fase:'3ª Rodada — Grupo D',data:'25/jun',hora:'23h',time1:'Turquia',time2:'Estados Unidos'},
-  {id:60,fase:'3ª Rodada — Grupo D',data:'25/jun',hora:'23h',time1:'Paraguai',time2:'Austrália'},
-  {id:61,fase:'3ª Rodada — Grupo I',data:'26/jun',hora:'16h',time1:'Noruega',time2:'França'},
-  {id:62,fase:'3ª Rodada — Grupo I',data:'26/jun',hora:'16h',time1:'Senegal',time2:'Iraque'},
-  {id:63,fase:'3ª Rodada — Grupo H',data:'26/jun',hora:'21h',time1:'Cabo Verde',time2:'Arábia Saudita'},
-  {id:64,fase:'3ª Rodada — Grupo H',data:'26/jun',hora:'21h',time1:'Uruguai',time2:'Espanha'},
-  {id:65,fase:'3ª Rodada — Grupo G',data:'27/jun',hora:'00h',time1:'Egito',time2:'Irã'},
-  {id:66,fase:'3ª Rodada — Grupo G',data:'27/jun',hora:'00h',time1:'Nova Zelândia',time2:'Bélgica'},
-  {id:67,fase:'3ª Rodada — Grupo L',data:'27/jun',hora:'18h',time1:'Panamá',time2:'Inglaterra'},
-  {id:68,fase:'3ª Rodada — Grupo L',data:'27/jun',hora:'18h',time1:'Croácia',time2:'Gana'},
-  {id:69,fase:'3ª Rodada — Grupo K',data:'27/jun',hora:'20h30',time1:'Colômbia',time2:'Portugal'},
-  {id:70,fase:'3ª Rodada — Grupo K',data:'27/jun',hora:'20h30',time1:'Congo (RD)',time2:'Uzbequistão'},
-  {id:71,fase:'3ª Rodada — Grupo J',data:'27/jun',hora:'23h',time1:'Argélia',time2:'Áustria'},
-  {id:72,fase:'3ª Rodada — Grupo J',data:'27/jun',hora:'23h',time1:'Jordânia',time2:'Argentina'},
-  {id:73,fase:'Rodada de 32 (28 jun – 3 jul)',data:'28/jun–3/jul',hora:'—',time1:'A definir',time2:'A definir'},
-  {id:74,fase:'Oitavas de Final (4–7 jul)',data:'4–7/jul',hora:'—',time1:'A definir',time2:'A definir'},
-  {id:75,fase:'Quartas de Final (9–11 jul)',data:'9–11/jul',hora:'—',time1:'A definir',time2:'A definir'},
-  {id:76,fase:'Semifinais (14–15 jul)',data:'14–15/jul',hora:'—',time1:'A definir',time2:'A definir'},
-  {id:77,fase:'Disputa 3º Lugar',data:'18/jul',hora:'18h',time1:'A definir',time2:'A definir'},
-  {id:78,fase:'🏆 Grande Final',data:'19/jul',hora:'16h',time1:'A definir',time2:'A definir'},
-];
+// ===== JOGOS ===== (carregado de /jogos.js — fonte única, global window.JOGOS)
 
 // ===== GAME TIME LOCK =====
 const MONTH_MAP={jan:1,fev:2,mar:3,abr:4,mai:5,jun:6,jul:7,ago:8,set:9,out:10,nov:11,dez:12};

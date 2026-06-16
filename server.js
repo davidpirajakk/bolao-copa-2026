@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
 const { Pool } = require('pg');
+const JOGOS_DATA = require('./public/jogos.js'); // fonte única de jogos (compartilhada com o cliente)
 
 const app = express();
 app.use(express.json());
@@ -493,27 +494,8 @@ app.put('/api/settings/apikey', requireAdmin, async (req, res) => {
 });
 
 // ===== GAME TIME LOCK =====
-const JOGOS_TIMES = {
-  1:['11/jun','16h'],2:['11/jun','23h'],3:['12/jun','16h'],4:['12/jun','22h'],
-  5:['14/jun','01h'],6:['13/jun','16h'],7:['13/jun','19h'],8:['13/jun','22h'],
-  9:['14/jun','14h'],10:['14/jun','17h'],11:['14/jun','20h'],12:['14/jun','23h'],
-  13:['15/jun','13h'],14:['15/jun','16h'],15:['15/jun','19h'],16:['15/jun','22h'],
-  17:['17/jun','01h'],18:['16/jun','16h'],19:['16/jun','19h'],20:['16/jun','22h'],
-  21:['17/jun','14h'],22:['17/jun','17h'],23:['17/jun','20h'],24:['17/jun','23h'],
-  25:['18/jun','13h'],26:['18/jun','16h'],27:['18/jun','19h'],28:['18/jun','22h'],
-  29:['20/jun','00h'],30:['19/jun','16h'],31:['19/jun','19h'],32:['19/jun','21h30'],
-  33:['21/jun','01h'],34:['20/jun','14h'],35:['20/jun','17h'],36:['20/jun','21h'],
-  37:['21/jun','13h'],38:['21/jun','16h'],39:['21/jun','19h'],40:['21/jun','22h'],
-  41:['23/jun','00h'],42:['22/jun','14h'],43:['22/jun','18h'],44:['22/jun','21h'],
-  45:['23/jun','14h'],46:['23/jun','17h'],47:['23/jun','20h'],48:['23/jun','23h'],
-  49:['24/jun','16h'],50:['24/jun','16h'],51:['24/jun','19h'],52:['24/jun','19h'],
-  53:['24/jun','22h'],54:['24/jun','22h'],55:['25/jun','17h'],56:['25/jun','17h'],
-  57:['25/jun','20h'],58:['25/jun','20h'],59:['25/jun','23h'],60:['25/jun','23h'],
-  61:['26/jun','16h'],62:['26/jun','16h'],63:['26/jun','21h'],64:['26/jun','21h'],
-  65:['27/jun','00h'],66:['27/jun','00h'],67:['27/jun','18h'],68:['27/jun','18h'],
-  69:['27/jun','20h30'],70:['27/jun','20h30'],71:['27/jun','23h'],72:['27/jun','23h'],
-  77:['18/jul','18h'],78:['19/jul','16h'],
-};
+// Derivado da fonte única (public/jogos.js) — sem duplicação de datas.
+const JOGOS_TIMES = Object.fromEntries(JOGOS_DATA.map(j => [j.id, [j.data, j.hora]]));
 
 const MONTH_MAP_SRV = {jan:1,fev:2,mar:3,abr:4,mai:5,jun:6,jul:7,ago:8,set:9,out:10,nov:11,dez:12};
 function parseGameTime(data, hora) {
@@ -558,27 +540,10 @@ const API_NAME_MAP = {
   'England':'Inglaterra','Croatia':'Croácia','Ghana':'Gana','Panama':'Panamá',
 };
 
-const JOGOS_MAP = {
-  'México|África do Sul':1,'Coreia do Sul|Rep. Tcheca':2,'Canadá|Bósnia-Herz.':3,
-  'Estados Unidos|Paraguai':4,'Austrália|Turquia':5,'Catar|Suíça':6,'Brasil|Marrocos':7,
-  'Haiti|Escócia':8,'Alemanha|Curaçao':9,'Holanda|Japão':10,'Costa do Marfim|Equador':11,
-  'Suécia|Tunísia':12,'Espanha|Cabo Verde':13,'Bélgica|Egito':14,'Arábia Saudita|Uruguai':15,
-  'Irã|Nova Zelândia':16,'Áustria|Jordânia':17,'França|Senegal':18,'Iraque|Noruega':19,
-  'Argentina|Argélia':20,'Portugal|Congo (RD)':21,'Inglaterra|Croácia':22,'Gana|Panamá':23,
-  'Uzbequistão|Colômbia':24,'Rep. Tcheca|África do Sul':25,'Suíça|Bósnia-Herz.':26,
-  'Canadá|Catar':27,'México|Coreia do Sul':28,'Turquia|Paraguai':29,'Estados Unidos|Austrália':30,
-  'Escócia|Marrocos':31,'Brasil|Haiti':32,'Tunísia|Japão':33,'Holanda|Suécia':34,
-  'Alemanha|Costa do Marfim':35,'Equador|Curaçao':36,'Espanha|Arábia Saudita':37,
-  'Bélgica|Irã':38,'Uruguai|Cabo Verde':39,'Nova Zelândia|Egito':40,'Jordânia|Argélia':41,
-  'Argentina|Áustria':42,'França|Iraque':43,'Noruega|Senegal':44,'Portugal|Uzbequistão':45,
-  'Inglaterra|Gana':46,'Panamá|Croácia':47,'Colômbia|Congo (RD)':48,'Suíça|Canadá':49,
-  'Bósnia-Herz.|Catar':50,'Escócia|Brasil':51,'Marrocos|Haiti':52,'Rep. Tcheca|México':53,
-  'África do Sul|Coreia do Sul':54,'Curaçao|Costa do Marfim':55,'Equador|Alemanha':56,
-  'Japão|Suécia':57,'Tunísia|Holanda':58,'Turquia|Estados Unidos':59,'Paraguai|Austrália':60,
-  'Noruega|França':61,'Senegal|Iraque':62,'Cabo Verde|Arábia Saudita':63,'Uruguai|Espanha':64,
-  'Egito|Irã':65,'Nova Zelândia|Bélgica':66,'Panamá|Inglaterra':67,'Croácia|Gana':68,
-  'Colômbia|Portugal':69,'Congo (RD)|Uzbequistão':70,'Argélia|Áustria':71,'Jordânia|Argentina':72,
-};
+const JOGOS_MAP = Object.fromEntries(
+  JOGOS_DATA.filter(j => j.time1 !== 'A definir' && j.time2 !== 'A definir')
+           .map(j => [`${j.time1}|${j.time2}`, j.id])
+);
 
 async function doSync() {
   const apiKey = await getApiKey();
