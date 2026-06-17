@@ -297,18 +297,14 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
         <div><div style="font-size:14px;font-weight:500">🟠 Goleada Exata</div><div class="rule-sub">Cravou o placar exato de uma goleada (ex: 5×0). Total: 5 + 2 = <b>7 pts</b></div></div>
       </div>
       <div style="font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin:14px 0 4px">Mata-mata — só pra quem palpitar empate</div>
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;line-height:1.6">Se você palpitar <b>empate</b> num jogo do mata-mata, libera 3 apostas extras. Cada acerto vale <b>+1</b>:</div>
-      <div class="rule-row">
-        <div class="rule-pts" style="color:#546e7a">+1</div>
-        <div><div style="font-size:14px;font-weight:500">Prorrogação</div><div class="rule-sub">Marcou e o jogo foi pra prorrogação</div></div>
-      </div>
-      <div class="rule-row">
-        <div class="rule-pts" style="color:#546e7a">+1</div>
-        <div><div style="font-size:14px;font-weight:500">Pênaltis</div><div class="rule-sub">Marcou e o jogo foi pra pênaltis</div></div>
-      </div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;line-height:1.6">Se você palpitar <b>empate</b> num jogo do mata-mata, escolha <b>quem se classifica</b>. <b>Se errar quem avança, perde todo o bônus do mata-mata.</b></div>
       <div class="rule-row">
         <div class="rule-pts" style="color:#b45309">+1</div>
-        <div><div style="font-size:14px;font-weight:500">🟠 Seleção classificada</div><div class="rule-sub">Acertou qual time avançou</div></div>
+        <div><div style="font-size:14px;font-weight:500">🟠 Seleção classificada</div><div class="rule-sub">Acertou qual time avançou (obrigatório pra ganhar qualquer bônus)</div></div>
+      </div>
+      <div class="rule-row">
+        <div class="rule-pts" style="color:#546e7a">+1</div>
+        <div><div style="font-size:14px;font-weight:500">Pênaltis</div><div class="rule-sub">Marcou pênaltis, foi pra pênaltis <b>e</b> acertou o classificado</div></div>
       </div>
       <div style="background:#f4f4f0;border-radius:8px;padding:10px 12px;margin-top:12px;font-size:12px;color:var(--text-muted);line-height:1.7">
         <b style="color:var(--text)">Exemplo:</b> você palpita 2 × 1 e sai 3 × 1 →
@@ -475,9 +471,10 @@ function scoreGame(p, r, jogo) {
   // Extras do mata-mata: só pra quem palpitou EMPATE e MARCOU (+1 por acerto). Acumulam até no placar exato.
   function extrasMataMata() {
     if (!jogo || jogo.id < 73 || p.g1 !== p.g2) return;
-    if (p.prorrogacao && r.overtime) { pts += 1; breakdown.push({ label: 'Prorrogação', pts: 1, color: '#546e7a' }); }
+    // Acertar quem se classifica é obrigatório: errar (ou não escolher) zera os bônus do mata-mata
+    if (!p.classificado || p.classificado !== r.classificado) return;
+    pts += 1; breakdown.push({ label: 'Classificado', pts: 1, color: '#b45309' });
     if (p.penaltis && r.penalties) { pts += 1; breakdown.push({ label: 'Pênaltis', pts: 1, color: '#546e7a' }); }
-    if (p.classificado && p.classificado === r.classificado) { pts += 1; breakdown.push({ label: 'Classificado', pts: 1, color: '#b45309' }); }
   }
 
   // Placar exato = 5 fixo (+2 goleada exata) + extras do mata-mata
@@ -765,18 +762,13 @@ function mataExtras(j, pp, pid, bloq) {
   if (j.id < 73 || !pp || pp.g1 !== pp.g2) return '';
   if (bloq) {
     const marcou = [];
-    if (pp.prorrogacao) marcou.push('Prorrogação');
     if (pp.penaltis) marcou.push('Pênaltis');
     if (pp.classificado) marcou.push('avança: ' + (pp.classificado === 1 ? j.time1 : j.time2));
     return `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);font-size:12px;color:var(--text-muted)">⚔️ Desempate: ${marcou.length ? marcou.join(' · ') : '(não apostou)'}</div>`;
   }
   return `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:7px">⚔️ Empate! Aposte o desempate — <b>+1 por acerto</b></div>
-    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px">
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="ex_pr_${j.id}" ${pp.prorrogacao ? 'checked' : ''} onchange="saveExtras(${pid},${j.id})"> Prorrogação</label>
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="ex_pe_${j.id}" ${pp.penaltis ? 'checked' : ''} onchange="saveExtras(${pid},${j.id})"> Pênaltis</label>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px">
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:7px">⚔️ Empate! Aposte o desempate — <b>acerte quem se classifica pra valer o bônus</b></div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:13px">
       <span>Quem se classifica?</span>
       <select id="ex_cl_${j.id}" onchange="saveExtras(${pid},${j.id})" style="padding:6px 10px;border-radius:8px;border:1.5px solid var(--border);font-family:'DM Sans',sans-serif;background:#f9fafb">
         <option value="">—</option>
@@ -784,6 +776,7 @@ function mataExtras(j, pp, pid, bloq) {
         <option value="2" ${pp.classificado === 2 ? 'selected' : ''}>${j.time2}</option>
       </select>
     </div>
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;margin-top:8px"><input type="checkbox" id="ex_pe_${j.id}" ${pp.penaltis ? 'checked' : ''} onchange="saveExtras(${pid},${j.id})"> E vai pra pênaltis? <span style="color:var(--text-muted);font-size:11px">(+1 se acertar os dois)</span></label>
   </div>`;
 }
 
@@ -960,11 +953,7 @@ function renderAdmin() {
       </div>
       ${isKnockout ? `<div style="display:flex;gap:16px;margin-top:10px;font-size:13px;color:var(--text-muted);flex-wrap:wrap;align-items:center">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="adm_${j.id}_ot" ${chkOT}> Prorrogação
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="adm_${j.id}_pen" ${chkPen}> Pênaltis
-        </label>
+          <input type="checkbox" id="adm_${j.id}_pen" ${chkPen}> Foi pra pênaltis</label>
         <label style="display:flex;align-items:center;gap:6px">Quem avançou:
           <select id="adm_${j.id}_cl" style="padding:5px 8px;border-radius:8px;border:1.5px solid var(--border);font-family:'DM Sans',sans-serif">
             <option value="">—</option>
@@ -980,12 +969,10 @@ function renderAdmin() {
 
 // ===== ACTIONS =====
 function lerExtras(jid) {
-  const pr = document.getElementById('ex_pr_' + jid);
   const pe = document.getElementById('ex_pe_' + jid);
   const cl = document.getElementById('ex_cl_' + jid);
-  if (!pr && !pe && !cl) return {};
+  if (!pe && !cl) return {};
   return {
-    prorrogacao: pr?.checked || false,
     penaltis: pe?.checked || false,
     classificado: parseInt(cl?.value) || null
   };
