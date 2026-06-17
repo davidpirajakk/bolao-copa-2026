@@ -653,13 +653,13 @@ app.post('/api/sync', requireAdmin, async (req, res) => {
           }
         }
       }
-    } catch (_) { /* football-data falhou — ignora, TheSportsDB cobre */ }
+    } catch (_) { /* football-data falhou — ignora, ESPN cobre */ }
   }
-  // Fonte 2: TheSportsDB (a confiável — sempre roda)
-  let sdb = 0;
-  try { sdb = await syncSportsDB(); } catch (_) {}
+  // Fonte 2: ESPN (a confiável, tempo real — sempre roda)
+  let espn = 0;
+  try { espn = await syncEspn(); } catch (_) {}
   broadcast();
-  res.json({ ok: true, updated: updated + sdb });
+  res.json({ ok: true, updated: updated + espn });
 });
 
 // ===== FONTE SECUNDÁRIA: TheSportsDB (placar + status ao vivo, confiável) =====
@@ -737,13 +737,70 @@ async function syncSportsDB() {
   return updated;
 }
 
+// ===== FONTE PRINCIPAL: ESPN (placar + status AO VIVO em tempo real, grátis) =====
+const ESPN_ALIAS = {
+  'Türkiye': 'Turquia', 'Turkey': 'Turquia', 'USA': 'Estados Unidos', 'United States': 'Estados Unidos',
+  'Czech Republic': 'Rep. Tcheca', 'Czechia': 'Rep. Tcheca', 'South Korea': 'Coreia do Sul', 'Korea Republic': 'Coreia do Sul',
+  'Bosnia-Herzegovina': 'Bósnia-Herz.', 'Bosnia & Herzegovina': 'Bósnia-Herz.', 'Bosnia and Herzegovina': 'Bósnia-Herz.',
+  'Congo DR': 'Congo (RD)', 'DR Congo': 'Congo (RD)', 'Ivory Coast': 'Costa do Marfim', "Côte d'Ivoire": 'Costa do Marfim',
+  'Cape Verde': 'Cabo Verde', 'Curaçao': 'Curaçao', 'New Zealand': 'Nova Zelândia', 'IR Iran': 'Irã',
+};
+function espnTeam(n) { return ESPN_ALIAS[n] || API_NAME_MAP[n] || n; }
+
+async function syncEspn() {
+  const dts = [-1, 0, 1].map(off => new Date(Date.now() + off * 86400000).toISOString().slice(0, 10).replace(/-/g, ''));
+  let updated = 0;
+  for (const dt of dts) {
+    let data;
+    try {
+      const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${dt}`, { signal: AbortSignal.timeout(6000) });
+      if (!res.ok) continue;
+      data = await res.json();
+    } catch { continue; }
+    for (const ev of data.events || []) {
+      const comp = ev.competitions?.[0];
+      if (!comp) continue;
+      const state = comp.status?.type?.state; // pre / in / post
+      const homeC = (comp.competitors || []).find(c => c.homeAway === 'home');
+      const awayC = (comp.competitors || []).find(c => c.homeAway === 'away');
+      if (!homeC || !awayC) continue;
+      const hN = espnTeam(homeC.team?.displayName || homeC.team?.name);
+      const aN = espnTeam(awayC.team?.displayName || awayC.team?.name);
+      let jogoId = JOGOS_MAP[`${hN}|${aN}`], invert = false;
+      if (!jogoId) { jogoId = JOGOS_MAP[`${aN}|${hN}`]; invert = true; }
+      if (!jogoId) continue;
+
+      const status = state === 'in' ? 'IN_PLAY' : state === 'post' ? 'FINISHED' : 'TIMED';
+      await pool.query(
+        "INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2 WHERE live_status.status IS DISTINCT FROM 'FINISHED'",
+        [jogoId, status]
+      );
+      if (state === 'pre') continue; // ainda não começou → sem placar
+
+      let g1 = parseInt(homeC.score), g2 = parseInt(awayC.score);
+      if (invert) { const t = g1; g1 = g2; g2 = t; }
+      if (isNaN(g1) || isNaN(g2)) continue;
+      const r = await pool.query(
+        `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties, source) VALUES ($1, $2, $3, false, false, 'api')
+         ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, source = 'api'
+         WHERE resultados.source IS DISTINCT FROM 'manual' AND (resultados.g1 <> $2 OR resultados.g2 <> $3)`,
+        [jogoId, g1, g2]
+      );
+      if (r.rowCount) updated++;
+    }
+  }
+  if (updated > 0) broadcast();
+  return updated;
+}
+
 // ===== AUTO-SYNC =====
 async function autoSync() {
   try {
-    const updated = await doSync();
-    let sdb = 0;
-    try { sdb = await syncSportsDB(); } catch (e) { /* fonte secundária: ignora */ }
-    console.log(`[auto-sync] ${new Date().toISOString()} — football-data: ${updated} | thesportsdb: ${sdb}`);
+    let fd = 0;
+    try { fd = await doSync(); } catch (_) { /* football-data opcional */ }
+    let espn = 0;
+    try { espn = await syncEspn(); } catch (_) { /* fonte principal (tempo real) */ }
+    console.log(`[auto-sync] ${new Date().toISOString()} — football-data: ${fd} | espn: ${espn}`);
   } catch (e) {
     console.error('[auto-sync] erro:', e.message);
   }
@@ -751,7 +808,8 @@ async function autoSync() {
 
 // ===== START =====
 const PORT = process.env.PORT || 3000;
-const SYNC_INTERVAL_MS = parseInt(process.env.SYNC_INTERVAL_MS) || 5 * 60 * 1000;
+// 2 min para acompanhar jogos ao vivo de perto
+const SYNC_INTERVAL_MS = parseInt(process.env.SYNC_INTERVAL_MS) || 2 * 60 * 1000;
 
 initDB()
   .then(() => {
