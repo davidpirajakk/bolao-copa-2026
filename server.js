@@ -445,6 +445,27 @@ app.put('/api/palpites/:playerId/:jogoId', async (req, res) => {
   res.json({ ok: true });
 });
 
+// Admin: lançar/corrigir palpite ignorando a trava de tempo (ex: palpite perdido por bug)
+app.put('/api/admin/palpite/:playerId/:jogoId', requireAdmin, async (req, res) => {
+  const playerId = parseInt(req.params.playerId);
+  const jogoId = parseInt(req.params.jogoId);
+  const g1 = parseInt(req.body.g1);
+  const g2 = parseInt(req.body.g2);
+  if (isNaN(g1) || isNaN(g2) || g1 < 0 || g2 < 0 || g1 > 20 || g2 > 20)
+    return res.status(400).json({ error: 'Placar inválido' });
+  const empate = g1 === g2;
+  const prorrogacao = empate && !!req.body.prorrogacao;
+  const penaltis = empate && !!req.body.penaltis;
+  const classificado = empate && [1, 2].includes(parseInt(req.body.classificado)) ? parseInt(req.body.classificado) : null;
+  await pool.query(
+    `INSERT INTO palpites (player_id, jogo_id, g1, g2, prorrogacao, penaltis, classificado) VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (player_id, jogo_id) DO UPDATE SET g1 = $3, g2 = $4, prorrogacao = $5, penaltis = $6, classificado = $7`,
+    [playerId, jogoId, g1, g2, prorrogacao, penaltis, classificado]
+  );
+  broadcast();
+  res.json({ ok: true });
+});
+
 app.put('/api/results/:jogoId', requireAdmin, async (req, res) => {
   const jogoId = parseInt(req.params.jogoId);
   const g1 = parseInt(req.body.g1);
