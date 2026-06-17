@@ -621,51 +621,45 @@ async function doSync() {
 
 app.post('/api/sync', requireAdmin, async (req, res) => {
   const apiKey = await getApiKey();
-  if (!apiKey) return res.status(400).json({ error: 'API key não configurada' });
-  try {
-    const apiRes = await fetch('https://api.football-data.org/v4/competitions/WC/matches?season=2026', {
-      headers: { 'X-Auth-Token': apiKey }
-    });
-    if (!apiRes.ok) {
-      const msg = apiRes.status === 403 || apiRes.status === 401
-        ? 'Chave inválida ou sem permissão para Copa do Mundo'
-        : `Erro da API: ${apiRes.status}`;
-      return res.status(apiRes.status).json({ error: msg });
-    }
-    const data = await apiRes.json();
-    let updated = 0;
-    for (const m of (data.matches || [])) {
-      const t1 = API_NAME_MAP[m.homeTeam?.name] || m.homeTeam?.name;
-      const t2 = API_NAME_MAP[m.awayTeam?.name] || m.awayTeam?.name;
-      const jogoId = JOGOS_MAP[`${t1}|${t2}`];
-      if (!jogoId) continue;
-
-      await pool.query(
-        "INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2 WHERE live_status.status IS DISTINCT FROM 'FINISHED'",
-        [jogoId, m.status]
-      );
-
-      if (['FINISHED', 'IN_PLAY', 'PAUSED'].includes(m.status) && m.score?.fullTime) {
-        const g1 = m.score.fullTime.home;
-        const g2 = m.score.fullTime.away;
-        if (g1 != null && g2 != null) {
+  let updated = 0;
+  // Fonte 1: football-data (OPCIONAL — se falhar, não aborta; segue pra TheSportsDB)
+  if (apiKey) {
+    try {
+      const apiRes = await fetch('https://api.football-data.org/v4/competitions/WC/matches?season=2026', {
+        headers: { 'X-Auth-Token': apiKey }
+      });
+      if (apiRes.ok) {
+        const data = await apiRes.json();
+        for (const m of (data.matches || [])) {
+          const t1 = API_NAME_MAP[m.homeTeam?.name] || m.homeTeam?.name;
+          const t2 = API_NAME_MAP[m.awayTeam?.name] || m.awayTeam?.name;
+          const jogoId = JOGOS_MAP[`${t1}|${t2}`];
+          if (!jogoId) continue;
           await pool.query(
-            `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties) VALUES ($1, $2, $3, $4, $5)
-             ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, overtime = $4, penalties = $5`,
-            [jogoId, g1, g2, m.score.extraTime != null, m.score.penalties != null]
+            "INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2 WHERE live_status.status IS DISTINCT FROM 'FINISHED'",
+            [jogoId, m.status]
           );
-          updated++;
+          if (['FINISHED', 'IN_PLAY', 'PAUSED'].includes(m.status) && m.score?.fullTime) {
+            const g1 = m.score.fullTime.home;
+            const g2 = m.score.fullTime.away;
+            if (g1 != null && g2 != null) {
+              await pool.query(
+                `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties) VALUES ($1, $2, $3, $4, $5)
+                 ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, overtime = $4, penalties = $5`,
+                [jogoId, g1, g2, m.score.extraTime != null, m.score.penalties != null]
+              );
+              updated++;
+            }
+          }
         }
       }
-    }
-    // Fonte secundária (best-effort): placar + status ao vivo mais rápido
-    let sdb = 0;
-    try { sdb = await syncSportsDB(); } catch (_) {}
-    broadcast();
-    res.json({ ok: true, updated: updated + sdb });
-  } catch (e) {
-    res.status(500).json({ error: 'Erro de conexão: ' + e.message });
+    } catch (_) { /* football-data falhou — ignora, TheSportsDB cobre */ }
   }
+  // Fonte 2: TheSportsDB (a confiável — sempre roda)
+  let sdb = 0;
+  try { sdb = await syncSportsDB(); } catch (_) {}
+  broadcast();
+  res.json({ ok: true, updated: updated + sdb });
 });
 
 // ===== FONTE SECUNDÁRIA: TheSportsDB (placar + status ao vivo, confiável) =====
