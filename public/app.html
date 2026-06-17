@@ -296,14 +296,19 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
         <div class="rule-pts" style="color:#f5a623">+2</div>
         <div><div style="font-size:14px;font-weight:500">🟠 Goleada Exata</div><div class="rule-sub">Cravou o placar exato de uma goleada (ex: 5×0). Total: 5 + 2 = <b>7 pts</b></div></div>
       </div>
-      <div style="font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin:14px 0 4px">Tempo extra (eliminatórias)</div>
+      <div style="font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin:14px 0 4px">Mata-mata — só pra quem palpitar empate</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;line-height:1.6">Se você palpitar <b>empate</b> num jogo do mata-mata, libera 3 apostas extras. Cada acerto vale <b>+1</b>:</div>
       <div class="rule-row">
         <div class="rule-pts" style="color:#546e7a">+1</div>
-        <div><div style="font-size:14px;font-weight:500">Prorrogação</div><div class="rule-sub">Palpitou empate e o jogo foi pra prorrogação</div></div>
+        <div><div style="font-size:14px;font-weight:500">Prorrogação</div><div class="rule-sub">Marcou e o jogo foi pra prorrogação</div></div>
       </div>
       <div class="rule-row">
         <div class="rule-pts" style="color:#546e7a">+1</div>
-        <div><div style="font-size:14px;font-weight:500">Pênaltis</div><div class="rule-sub">Palpitou empate e o jogo foi pra pênaltis</div></div>
+        <div><div style="font-size:14px;font-weight:500">Pênaltis</div><div class="rule-sub">Marcou e o jogo foi pra pênaltis</div></div>
+      </div>
+      <div class="rule-row">
+        <div class="rule-pts" style="color:#b45309">+1</div>
+        <div><div style="font-size:14px;font-weight:500">🟠 Seleção classificada</div><div class="rule-sub">Acertou qual time avançou</div></div>
       </div>
       <div style="background:#f4f4f0;border-radius:8px;padding:10px 12px;margin-top:12px;font-size:12px;color:var(--text-muted);line-height:1.7">
         <b style="color:var(--text)">Exemplo:</b> você palpita 2 × 1 e sai 3 × 1 →
@@ -467,14 +472,20 @@ function scoreGame(p, r, jogo) {
   const pw = p.g1 > p.g2 ? 1 : p.g1 < p.g2 ? 2 : 0;
   const correctWinner = rw === pw;
 
-  // Placar exato = 5 fixo. Exceção: goleada exata soma +2 (total 7)
+  // Extras do mata-mata: só pra quem palpitou EMPATE e MARCOU (+1 por acerto). Acumulam até no placar exato.
+  function extrasMataMata() {
+    if (!jogo || jogo.id < 73 || p.g1 !== p.g2) return;
+    if (p.prorrogacao && r.overtime) { pts += 1; breakdown.push({ label: 'Prorrogação', pts: 1, color: '#546e7a' }); }
+    if (p.penaltis && r.penalties) { pts += 1; breakdown.push({ label: 'Pênaltis', pts: 1, color: '#546e7a' }); }
+    if (p.classificado && p.classificado === r.classificado) { pts += 1; breakdown.push({ label: 'Classificado', pts: 1, color: '#b45309' }); }
+  }
+
+  // Placar exato = 5 fixo (+2 goleada exata) + extras do mata-mata
   if (exact) {
-    const bd = [{ label: 'Placar exato', pts: 5, color: '#00a651' }];
-    let total = 5;
-    if (Math.abs(r.g1 - r.g2) >= 3) {
-      total += 2; bd.push({ label: 'Goleada exata', pts: 2, color: '#f5a623' });
-    }
-    return { pts: total, breakdown: bd };
+    pts = 5; breakdown.push({ label: 'Placar exato', pts: 5, color: '#00a651' });
+    if (Math.abs(r.g1 - r.g2) >= 3) { pts += 2; breakdown.push({ label: 'Goleada exata', pts: 2, color: '#f5a623' }); }
+    extrasMataMata();
+    return { pts, breakdown };
   }
   if (correctWinner) {
     pts += 3; breakdown.push({ label: 'Placar vencedor', pts: 3, color: '#1a56c4' });
@@ -490,12 +501,7 @@ function scoreGame(p, r, jogo) {
   if (Math.abs(r.g1 - r.g2) >= 3 && Math.abs(p.g1 - p.g2) >= 3) {
     pts += 1; breakdown.push({ label: 'Goleada', pts: 1, color: '#f5a623' });
   }
-  if (p.g1 === p.g2 && r.overtime) {
-    pts += 1; breakdown.push({ label: 'Prorrogação', pts: 1, color: '#546e7a' });
-  }
-  if (p.g1 === p.g2 && r.penalties) {
-    pts += 1; breakdown.push({ label: 'Pênaltis', pts: 1, color: '#546e7a' });
-  }
+  extrasMataMata();
   return { pts, breakdown };
 }
 
@@ -749,9 +755,36 @@ function renderPalpites() {
         <span class="score-vs">×</span>
         <input type="number" min="0" max="20" class="score-inp" value="${v2}" placeholder="–" ${bloq ? 'disabled' : ''} onchange="savePalpite(${p.id},${j.id},1,this.value)">
         <span class="palpite-team right">${flag(j.time2,20)} ${j.time2}</span>
-      </div>${r ? `<div class="result-line">${flag(j.time1,16)} ${j.time1} ${r.g1} × ${r.g2} ${j.time2} ${flag(j.time2,16)}</div>` : ''}</div>`;
+      </div>${mataExtras(j, pp, p.id, bloq)}${r ? `<div class="result-line">${flag(j.time1,16)} ${j.time1} ${r.g1} × ${r.g2} ${j.time2} ${flag(j.time2,16)}</div>` : ''}</div>`;
   });
   el.innerHTML = h;
+}
+
+// Aposta extra do mata-mata: só aparece quando o palpite é empate num jogo de mata-mata
+function mataExtras(j, pp, pid, bloq) {
+  if (j.id < 73 || !pp || pp.g1 !== pp.g2) return '';
+  if (bloq) {
+    const marcou = [];
+    if (pp.prorrogacao) marcou.push('Prorrogação');
+    if (pp.penaltis) marcou.push('Pênaltis');
+    if (pp.classificado) marcou.push('avança: ' + (pp.classificado === 1 ? j.time1 : j.time2));
+    return `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);font-size:12px;color:var(--text-muted)">⚔️ Desempate: ${marcou.length ? marcou.join(' · ') : '(não apostou)'}</div>`;
+  }
+  return `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:7px">⚔️ Empate! Aposte o desempate — <b>+1 por acerto</b></div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="ex_pr_${j.id}" ${pp.prorrogacao ? 'checked' : ''} onchange="saveExtras(${pid},${j.id})"> Prorrogação</label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="ex_pe_${j.id}" ${pp.penaltis ? 'checked' : ''} onchange="saveExtras(${pid},${j.id})"> Pênaltis</label>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px">
+      <span>Quem se classifica?</span>
+      <select id="ex_cl_${j.id}" onchange="saveExtras(${pid},${j.id})" style="padding:6px 10px;border-radius:8px;border:1.5px solid var(--border);font-family:'DM Sans',sans-serif;background:#f9fafb">
+        <option value="">—</option>
+        <option value="1" ${pp.classificado === 1 ? 'selected' : ''}>${j.time1}</option>
+        <option value="2" ${pp.classificado === 2 ? 'selected' : ''}>${j.time2}</option>
+      </select>
+    </div>
+  </div>`;
 }
 
 // Distribuição dos palpites: % vitória time1, empate, vitória time2
@@ -925,12 +958,19 @@ function renderAdmin() {
           ? `<button onclick="finalizarJogo(${j.id},false)" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer">↩️ Reabrir jogo</button>`
           : `<button onclick="finalizarJogo(${j.id},true)" style="background:none;border:1px solid var(--green-mid);color:var(--green-dark);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;font-weight:600">🏁 Finalizar jogo</button>`}
       </div>
-      ${isKnockout ? `<div style="display:flex;gap:16px;margin-top:10px;font-size:13px;color:var(--text-muted)">
+      ${isKnockout ? `<div style="display:flex;gap:16px;margin-top:10px;font-size:13px;color:var(--text-muted);flex-wrap:wrap;align-items:center">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
           <input type="checkbox" id="adm_${j.id}_ot" ${chkOT}> Prorrogação
         </label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
           <input type="checkbox" id="adm_${j.id}_pen" ${chkPen}> Pênaltis
+        </label>
+        <label style="display:flex;align-items:center;gap:6px">Quem avançou:
+          <select id="adm_${j.id}_cl" style="padding:5px 8px;border-radius:8px;border:1.5px solid var(--border);font-family:'DM Sans',sans-serif">
+            <option value="">—</option>
+            <option value="1" ${r?.classificado === 1 ? 'selected' : ''}>${j.time1}</option>
+            <option value="2" ${r?.classificado === 2 ? 'selected' : ''}>${j.time2}</option>
+          </select>
         </label>
       </div>` : ''}
     </div>`;
@@ -939,16 +979,38 @@ function renderAdmin() {
 }
 
 // ===== ACTIONS =====
+function lerExtras(jid) {
+  const pr = document.getElementById('ex_pr_' + jid);
+  const pe = document.getElementById('ex_pe_' + jid);
+  const cl = document.getElementById('ex_cl_' + jid);
+  if (!pr && !pe && !cl) return {};
+  return {
+    prorrogacao: pr?.checked || false,
+    penaltis: pe?.checked || false,
+    classificado: parseInt(cl?.value) || null
+  };
+}
+
 async function savePalpite(pid, jid, slot, val) {
   const pal = (state.palpites[pid] || {})[jid] || { g1: 0, g2: 0 };
   const n = parseInt(val);
   if (isNaN(n) || n < 0) return;
-  const update = { g1: pal.g1 ?? 0, g2: pal.g2 ?? 0 };
+  const update = { g1: pal.g1 ?? 0, g2: pal.g2 ?? 0, ...lerExtras(jid) };
   if (slot === 0) update.g1 = n; else update.g2 = n;
   await fetch(`/api/palpites/${pid}/${jid}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(update)
+  });
+}
+
+async function saveExtras(pid, jid) {
+  const pal = (state.palpites[pid] || {})[jid];
+  if (!pal) return;
+  await fetch(`/api/palpites/${pid}/${jid}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ g1: pal.g1, g2: pal.g2, ...lerExtras(jid) })
   });
 }
 
@@ -971,10 +1033,11 @@ async function saveResult(jid) {
   if (isNaN(g1) || isNaN(g2)) { alert('Insira os dois placares.'); return; }
   const otEl = document.getElementById(`adm_${jid}_ot`);
   const penEl = document.getElementById(`adm_${jid}_pen`);
+  const clEl = document.getElementById(`adm_${jid}_cl`);
   await fetch(`/api/results/${jid}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ g1, g2, overtime: otEl?.checked || false, penalties: penEl?.checked || false })
+    body: JSON.stringify({ g1, g2, overtime: otEl?.checked || false, penalties: penEl?.checked || false, classificado: parseInt(clEl?.value) || null })
   });
 }
 

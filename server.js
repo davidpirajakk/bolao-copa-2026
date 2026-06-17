@@ -36,6 +36,11 @@ async function initDB() {
     await client.query(`ALTER TABLE users ALTER COLUMN created_at SET DEFAULT NOW()`);
     // Migration: origem do resultado — 'manual' (admin) nunca é sobrescrito pelas APIs
     await client.query(`ALTER TABLE resultados ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'api'`);
+    // Migration: aposta extra do mata-mata (só vale quando o palpite é empate)
+    await client.query(`ALTER TABLE palpites ADD COLUMN IF NOT EXISTS prorrogacao BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE palpites ADD COLUMN IF NOT EXISTS penaltis BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE palpites ADD COLUMN IF NOT EXISTS classificado INTEGER`);
+    await client.query(`ALTER TABLE resultados ADD COLUMN IF NOT EXISTS classificado INTEGER`);
     await client.query(`
       CREATE TABLE IF NOT EXISTS players (
         id SERIAL PRIMARY KEY,
@@ -81,8 +86,8 @@ async function initDB() {
 async function getState() {
   const [playersR, palpitesR, resultadosR, liveR, settingsR, campeaoRealR] = await Promise.all([
     pool.query('SELECT id, nome FROM players ORDER BY id'),
-    pool.query('SELECT player_id, jogo_id, g1, g2 FROM palpites'),
-    pool.query('SELECT jogo_id, g1, g2, overtime, penalties FROM resultados'),
+    pool.query('SELECT player_id, jogo_id, g1, g2, prorrogacao, penaltis, classificado FROM palpites'),
+    pool.query('SELECT jogo_id, g1, g2, overtime, penalties, classificado FROM resultados'),
     pool.query('SELECT jogo_id, status FROM live_status'),
     pool.query("SELECT value FROM settings WHERE key = 'api_key'"),
     pool.query("SELECT value FROM settings WHERE key = 'campeao_real'"),
@@ -92,12 +97,12 @@ async function getState() {
   for (const row of palpitesR.rows) {
     const pid = String(row.player_id);
     if (!palpites[pid]) palpites[pid] = {};
-    palpites[pid][String(row.jogo_id)] = { g1: row.g1, g2: row.g2 };
+    palpites[pid][String(row.jogo_id)] = { g1: row.g1, g2: row.g2, prorrogacao: row.prorrogacao, penaltis: row.penaltis, classificado: row.classificado };
   }
 
   const resultados = {};
   for (const row of resultadosR.rows) {
-    resultados[String(row.jogo_id)] = { g1: row.g1, g2: row.g2, overtime: row.overtime, penalties: row.penalties };
+    resultados[String(row.jogo_id)] = { g1: row.g1, g2: row.g2, overtime: row.overtime, penalties: row.penalties, classificado: row.classificado };
   }
 
   const liveStatus = {};
@@ -425,10 +430,16 @@ app.put('/api/palpites/:playerId/:jogoId', async (req, res) => {
   const hasResult = await pool.query('SELECT 1 FROM resultados WHERE jogo_id = $1', [jogoId]);
   if (hasResult.rows.length) return res.status(400).json({ error: 'Jogo já encerrado' });
 
+  // Apostas extras do mata-mata — só valem quando o palpite é empate
+  const empate = g1 === g2;
+  const prorrogacao = empate && !!req.body.prorrogacao;
+  const penaltis = empate && !!req.body.penaltis;
+  const classificado = empate && [1, 2].includes(parseInt(req.body.classificado)) ? parseInt(req.body.classificado) : null;
+
   await pool.query(
-    `INSERT INTO palpites (player_id, jogo_id, g1, g2) VALUES ($1, $2, $3, $4)
-     ON CONFLICT (player_id, jogo_id) DO UPDATE SET g1 = $3, g2 = $4`,
-    [playerId, jogoId, g1, g2]
+    `INSERT INTO palpites (player_id, jogo_id, g1, g2, prorrogacao, penaltis, classificado) VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (player_id, jogo_id) DO UPDATE SET g1 = $3, g2 = $4, prorrogacao = $5, penaltis = $6, classificado = $7`,
+    [playerId, jogoId, g1, g2, prorrogacao, penaltis, classificado]
   );
   broadcast();
   res.json({ ok: true });
@@ -440,14 +451,15 @@ app.put('/api/results/:jogoId', requireAdmin, async (req, res) => {
   const g2 = parseInt(req.body.g2);
   const overtime = !!req.body.overtime;
   const penalties = !!req.body.penalties;
+  const classificado = [1, 2].includes(parseInt(req.body.classificado)) ? parseInt(req.body.classificado) : null;
 
   if (isNaN(g1) || isNaN(g2) || g1 < 0 || g2 < 0 || g1 > 20 || g2 > 20)
     return res.status(400).json({ error: 'Placar inválido' });
 
   await pool.query(
-    `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties, source) VALUES ($1, $2, $3, $4, $5, 'manual')
-     ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, overtime = $4, penalties = $5, source = 'manual'`,
-    [jogoId, g1, g2, overtime, penalties]
+    `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties, classificado, source) VALUES ($1, $2, $3, $4, $5, $6, 'manual')
+     ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, overtime = $4, penalties = $5, classificado = $6, source = 'manual'`,
+    [jogoId, g1, g2, overtime, penalties, classificado]
   );
   broadcast();
   res.json({ ok: true });
