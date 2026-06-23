@@ -374,6 +374,20 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
   res.json(r.rows);
 });
 
+// Admin: redefinir senha de usuário
+app.put('/api/admin/reset-senha/:id', requireAdmin, async (req, res) => {
+  const userId = parseInt(req.params.id);
+  const { senha } = req.body;
+  if (!senha || senha.trim().length < 3) return res.status(400).json({ error: 'Senha muito curta (mínimo 3 caracteres)' });
+  try {
+    const r = await pool.query('UPDATE users SET senha = $1 WHERE id = $2 RETURNING id', [senha.trim(), userId]);
+    if (!r.rowCount) return res.status(404).json({ error: 'Usuário não encontrado' });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Erro ao redefinir senha' });
+  }
+});
+
 // Admin: apagar usuário e seu player
 app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   const userId = parseInt(req.params.id);
