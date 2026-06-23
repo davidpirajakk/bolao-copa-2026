@@ -378,9 +378,10 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
 app.put('/api/admin/reset-senha/:id', requireAdmin, async (req, res) => {
   const userId = parseInt(req.params.id);
   const { senha } = req.body;
-  if (!senha || senha.trim().length < 3) return res.status(400).json({ error: 'Senha muito curta (mínimo 3 caracteres)' });
+  if (!senha || senha.trim().length < 4) return res.status(400).json({ error: 'Senha muito curta (mínimo 4 caracteres)' });
   try {
-    const r = await pool.query('UPDATE users SET senha = $1 WHERE id = $2 RETURNING id', [senha.trim(), userId]);
+    const { hash, salt } = hashPassword(senha.trim());
+    const r = await pool.query('UPDATE users SET hash = $1, salt = $2 WHERE id = $3 RETURNING id', [hash, salt, userId]);
     if (!r.rowCount) return res.status(404).json({ error: 'Usuário não encontrado' });
     res.json({ ok: true });
   } catch (e) {
