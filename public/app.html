@@ -797,7 +797,9 @@ function renderPalpites() {
         <span class="score-vs">×</span>
         <input type="number" min="0" max="20" class="score-inp" value="${v2}" placeholder="–" ${bloq ? 'disabled' : ''} onchange="savePalpite(${p.id},${j.id},1,this.value)">
         <span class="palpite-team right">${flag(j.time2,20)} ${j.time2}</span>
-      </div>${mataExtras(j, pp, p.id, bloq)}${r ? `<div class="result-line">${flag(j.time1,16)} ${j.time1} ${r.g1} × ${r.g2} ${j.time2} ${flag(j.time2,16)}</div>` : ''}</div>`;
+      </div>
+      ${j.id >= 73 ? `<div style="margin-top:8px;padding:6px 10px;background:#fff0e0;border-radius:7px;font-size:11px;color:#92400e;line-height:1.5">⚠️ <b>Mata-mata:</b> só pontua quem acertar a seleção classificada. Errou quem avança = <b>0 pts</b>.</div>` : ''}
+      ${mataExtras(j, pp, p.id, bloq)}${r ? `<div class="result-line">${flag(j.time1,16)} ${j.time1} ${r.g1} × ${r.g2} ${j.time2} ${flag(j.time2,16)}</div>` : ''}</div>`;
   });
   el.innerHTML = h;
 }
