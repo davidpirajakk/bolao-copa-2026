@@ -41,6 +41,22 @@ async function initDB() {
     await client.query(`ALTER TABLE palpites ADD COLUMN IF NOT EXISTS penaltis BOOLEAN DEFAULT FALSE`);
     await client.query(`ALTER TABLE palpites ADD COLUMN IF NOT EXISTS classificado INTEGER`);
     await client.query(`ALTER TABLE resultados ADD COLUMN IF NOT EXISTS classificado INTEGER`);
+    // Jogos do mata-mata descobertos automaticamente via ESPN
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS mata_jogos (
+        id INTEGER PRIMARY KEY,
+        espn_id TEXT UNIQUE NOT NULL,
+        fase TEXT NOT NULL,
+        data TEXT NOT NULL,
+        hora TEXT NOT NULL,
+        time1 TEXT NOT NULL,
+        time2 TEXT NOT NULL
+      )
+    `);
+    // Garante sequência para IDs de mata_jogos a partir de 1000
+    await client.query(`
+      CREATE SEQUENCE IF NOT EXISTS mata_jogos_seq START 1000 MINVALUE 1000
+    `);
     await client.query(`
       CREATE TABLE IF NOT EXISTS players (
         id SERIAL PRIMARY KEY,
@@ -84,13 +100,14 @@ async function initDB() {
 }
 
 async function getState() {
-  const [playersR, palpitesR, resultadosR, liveR, settingsR, campeaoRealR] = await Promise.all([
+  const [playersR, palpitesR, resultadosR, liveR, settingsR, campeaoRealR, mataJogosR] = await Promise.all([
     pool.query('SELECT id, nome FROM players ORDER BY id'),
     pool.query('SELECT player_id, jogo_id, g1, g2, prorrogacao, penaltis, classificado FROM palpites'),
     pool.query('SELECT jogo_id, g1, g2, overtime, penalties, classificado FROM resultados'),
     pool.query('SELECT jogo_id, status FROM live_status'),
     pool.query("SELECT value FROM settings WHERE key = 'api_key'"),
     pool.query("SELECT value FROM settings WHERE key = 'campeao_real'"),
+    pool.query('SELECT id, fase, data, hora, time1, time2 FROM mata_jogos ORDER BY id'),
   ]);
 
   const palpites = {};
@@ -124,6 +141,7 @@ async function getState() {
     campeoes,
     campeaoReal: campeaoRealR.rows.length ? campeaoRealR.rows[0].value : null,
     hasApiKey: settingsR.rows.length > 0 && !!settingsR.rows[0].value,
+    mataJogos: mataJogosR.rows,
   };
 }
 
@@ -440,7 +458,7 @@ app.put('/api/palpites/:playerId/:jogoId', async (req, res) => {
   if (isNaN(g1) || isNaN(g2) || g1 < 0 || g2 < 0 || g1 > 20 || g2 > 20)
     return res.status(400).json({ error: 'Placar inválido' });
 
-  if (isGameLocked(jogoId)) return res.status(400).json({ error: 'Palpites encerrados (menos de 1h para o jogo)' });
+  if (await isGameLockedAsync(jogoId)) return res.status(400).json({ error: 'Palpites encerrados (menos de 1h para o jogo)' });
 
   const hasResult = await pool.query('SELECT 1 FROM resultados WHERE jogo_id = $1', [jogoId]);
   if (hasResult.rows.length) return res.status(400).json({ error: 'Jogo já encerrado' });
@@ -562,12 +580,31 @@ function parseGameTime(data, hora) {
   return new Date(Date.UTC(2026, mon - 1, day, h + 3, m));
 }
 
+// Cache em memória dos mata_jogos para isGameLocked
+const mataJogosCache = {};
+async function getMataJogoTime(jogoId) {
+  if (mataJogosCache[jogoId]) return mataJogosCache[jogoId];
+  const r = await pool.query('SELECT data, hora FROM mata_jogos WHERE id = $1', [jogoId]);
+  if (r.rows.length) mataJogosCache[jogoId] = [r.rows[0].data, r.rows[0].hora];
+  return mataJogosCache[jogoId] || null;
+}
+
 function isGameLocked(jogoId) {
   const times = JOGOS_TIMES[jogoId];
-  if (!times) return false; // knockout TBD games (73-76) are never locked by time
+  if (!times) return false; // mata_jogos checam separado (async)
   const gameTime = parseGameTime(times[0], times[1]);
   if (!gameTime) return false;
   return Date.now() >= gameTime.getTime() - 60 * 60 * 1000; // 1h before
+}
+
+async function isGameLockedAsync(jogoId) {
+  if (JOGOS_TIMES[jogoId]) return isGameLocked(jogoId);
+  // mata_jogos
+  const times = await getMataJogoTime(jogoId);
+  if (!times) return false;
+  const gameTime = parseGameTime(times[0], times[1]);
+  if (!gameTime) return false;
+  return Date.now() >= gameTime.getTime() - 60 * 60 * 1000;
 }
 
 // ===== FOOTBALL-DATA SYNC =====
@@ -762,9 +799,26 @@ const ESPN_ALIAS = {
 };
 function espnTeam(n) { return ESPN_ALIAS[n] || API_NAME_MAP[n] || n; }
 
+// Determina a fase do mata-mata pela data do jogo
+function faseMataMata(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00Z');
+  const ymd = d.toISOString().slice(0, 10);
+  if (ymd <= '2026-07-03') return 'Rodada de 32';
+  if (ymd <= '2026-07-09') return 'Oitavas de Final';
+  if (ymd <= '2026-07-12') return 'Quartas de Final';
+  if (ymd <= '2026-07-16') return 'Semifinais';
+  if (ymd === '2026-07-18') return 'Disputa 3º Lugar';
+  return '🏆 Grande Final';
+}
+
 async function syncEspn() {
   const dts = [-1, 0, 1].map(off => new Date(Date.now() + off * 86400000).toISOString().slice(0, 10).replace(/-/g, ''));
   let updated = 0;
+
+  // Carrega mata_jogos existentes indexados por espn_id
+  const mataR = await pool.query('SELECT id, espn_id FROM mata_jogos');
+  const mataByEspnId = Object.fromEntries(mataR.rows.map(r => [r.espn_id, r.id]));
+
   for (const dt of dts) {
     let data;
     try {
@@ -775,22 +829,53 @@ async function syncEspn() {
     for (const ev of data.events || []) {
       const comp = ev.competitions?.[0];
       if (!comp) continue;
+      const espnId = String(ev.id || comp.id || '');
       const state = comp.status?.type?.state; // pre / in / post
       const homeC = (comp.competitors || []).find(c => c.homeAway === 'home');
       const awayC = (comp.competitors || []).find(c => c.homeAway === 'away');
       if (!homeC || !awayC) continue;
       const hN = espnTeam(homeC.team?.displayName || homeC.team?.name);
       const aN = espnTeam(awayC.team?.displayName || awayC.team?.name);
+
       let jogoId = JOGOS_MAP[`${hN}|${aN}`], invert = false;
       if (!jogoId) { jogoId = JOGOS_MAP[`${aN}|${hN}`]; invert = true; }
-      if (!jogoId) continue;
+
+      // Não encontrou no mapa estático — pode ser jogo do mata-mata
+      if (!jogoId) {
+        invert = false;
+        if (mataByEspnId[espnId]) {
+          jogoId = mataByEspnId[espnId];
+        } else if (espnId && dt >= '20260627') {
+          // Novo jogo de mata-mata detectado — registra no banco
+          const gameDate = ev.date ? ev.date.slice(0, 10) : `${dt.slice(0,4)}-${dt.slice(4,6)}-${dt.slice(6,8)}`;
+          const fase = faseMataMata(gameDate);
+          const diaMes = `${parseInt(gameDate.slice(8,10))}/${['jan','fev','mar','abr','mai','jun','jul'][parseInt(gameDate.slice(5,7))-1]}`;
+          // Hora em BRT (UTC-3): pega do ESPN ou usa '—'
+          let hora = '—';
+          if (ev.date) {
+            const utcH = new Date(ev.date).getUTCHours();
+            const brtH = (utcH - 3 + 24) % 24;
+            hora = `${brtH}h`;
+          }
+          const newId = (await pool.query(`SELECT nextval('mata_jogos_seq') AS id`)).rows[0].id;
+          await pool.query(
+            'INSERT INTO mata_jogos (id, espn_id, fase, data, hora, time1, time2) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (espn_id) DO NOTHING',
+            [newId, espnId, fase, diaMes, hora, hN, aN]
+          );
+          jogoId = newId;
+          mataByEspnId[espnId] = newId;
+          delete mataJogosCache[newId];
+          updated++;
+        }
+        if (!jogoId) continue;
+      }
 
       const status = state === 'in' ? 'IN_PLAY' : state === 'post' ? 'FINISHED' : 'TIMED';
       await pool.query(
         "INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2 WHERE live_status.status IS DISTINCT FROM 'FINISHED'",
         [jogoId, status]
       );
-      if (state === 'pre') continue; // ainda não começou → sem placar
+      if (state === 'pre') continue;
 
       let g1 = parseInt(homeC.score), g2 = parseInt(awayC.score);
       if (invert) { const t = g1; g1 = g2; g2 = t; }

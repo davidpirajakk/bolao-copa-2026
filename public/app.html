@@ -446,6 +446,17 @@ function connectSSE() {
   evtSource = new EventSource('/api/events');
   evtSource.onmessage = (e) => {
     state = JSON.parse(e.data);
+    // Mescla jogos do mata-mata (do DB) ao array JOGOS estático
+    if (state.mataJogos && state.mataJogos.length) {
+      const ids = new Set(JOGOS.map(j => j.id));
+      for (const mj of state.mataJogos) {
+        if (!ids.has(mj.id)) { JOGOS.push(mj); ids.add(mj.id); }
+        else {
+          const idx = JOGOS.findIndex(j => j.id === mj.id);
+          if (idx !== -1) JOGOS[idx] = { ...JOGOS[idx], ...mj };
+        }
+      }
+    }
     const activeEl = document.activeElement;
     const palpitesEl = document.getElementById('palpitesContent');
     const focusedInPalpites = palpitesEl && palpitesEl.contains(activeEl) && activeEl.tagName === 'INPUT';
