@@ -261,6 +261,20 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
       </div>
       <div id="campeaoRealStatus" class="api-status"></div>
     </div>
+    <div class="card" style="margin-bottom:1rem;border:1.5px solid #e879f9">
+      <b style="font-size:15px">⚔️ Jogos Mata-Mata</b>
+      <p style="font-size:13px;color:var(--text-muted);margin:6px 0 12px">Adicione os jogos do mata-mata manualmente quando a chave do ESPN não detectar automaticamente.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <input id="mmTime1" placeholder="Time 1 (ex: Brasil)" style="padding:8px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+        <input id="mmTime2" placeholder="Time 2 (ex: Argentina)" style="padding:8px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+        <input id="mmData" placeholder="Data (ex: 29/jun)" style="padding:8px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+        <input id="mmHora" placeholder="Hora (ex: 16:00)" style="padding:8px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+        <input id="mmFase" placeholder="Fase (ex: Oitavas)" style="padding:8px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;grid-column:1/-1">
+      </div>
+      <button class="btn-save" onclick="addMataJogo()" style="background:linear-gradient(135deg,#a855f7,#7c3aed)">➕ Adicionar jogo</button>
+      <div id="mmStatus" class="api-status"></div>
+      <div id="mmList" style="margin-top:12px;font-size:13px"></div>
+    </div>
     <div class="card" style="margin-bottom:1rem">
       <b style="font-size:15px">⚙️ Resultados manuais</b>
       <p style="font-size:13px;color:var(--text-muted);margin-top:6px">Se preferir, insira os placares manualmente. Com a chave da API configurada, use o botão "Atualizar placares" no topo.</p>
@@ -972,6 +986,7 @@ function renderJogos() {
 function renderAdmin() {
   const box = document.getElementById('apiBox');
   box.style.display = state.hasApiKey ? 'none' : 'block';
+  renderMataJogosAdmin();
   // Load users list
   loadUsersList();
   // Populate campeão real select
@@ -1177,6 +1192,43 @@ async function saveCampeaoReal() {
     status.textContent = data.error || 'Erro ao salvar.';
     status.className = 'api-status err';
   }
+}
+
+async function addMataJogo() {
+  const time1 = document.getElementById('mmTime1').value.trim();
+  const time2 = document.getElementById('mmTime2').value.trim();
+  const data = document.getElementById('mmData').value.trim();
+  const hora = document.getElementById('mmHora').value.trim();
+  const fase = document.getElementById('mmFase').value.trim();
+  const st = document.getElementById('mmStatus');
+  if (!time1 || !time2) { st.textContent = 'Preencha os dois times.'; st.style.color = 'red'; return; }
+  const res = await fetch('/api/admin/mata-jogos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ time1, time2, data, hora, fase })
+  });
+  const d = await res.json();
+  if (d.ok) {
+    st.textContent = `✓ Jogo adicionado (id ${d.jogo.id})`;
+    st.style.color = 'green';
+    ['mmTime1','mmTime2','mmData','mmHora','mmFase'].forEach(id => document.getElementById(id).value = '');
+  } else {
+    st.textContent = d.error || 'Erro';
+    st.style.color = 'red';
+  }
+}
+
+function renderMataJogosAdmin() {
+  const el = document.getElementById('mmList');
+  if (!el || !state.mataJogos) return;
+  if (!state.mataJogos.length) { el.innerHTML = '<span style="color:var(--text-muted)">Nenhum jogo cadastrado ainda.</span>'; return; }
+  el.innerHTML = state.mataJogos.map(j =>
+    `<div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center">
+      <span style="color:var(--text-muted);min-width:28px">#${j.id}</span>
+      <b>${j.time1} × ${j.time2}</b>
+      <span style="color:var(--text-muted)">${j.data} ${j.hora} · ${j.fase}</span>
+    </div>`
+  ).join('');
 }
 
 async function saveApiKey() {

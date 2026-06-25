@@ -407,6 +407,23 @@ app.put('/api/admin/reset-senha/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// Admin: criar jogo de mata-mata manualmente
+app.post('/api/admin/mata-jogos', requireAdmin, async (req, res) => {
+  const { time1, time2, data, hora, fase } = req.body;
+  if (!time1 || !time2) return res.status(400).json({ error: 'time1 e time2 obrigatórios' });
+  try {
+    const r = await pool.query(
+      `INSERT INTO mata_jogos (time1, time2, data, hora, fase) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [time1, time2, data || '??/??', hora || '??:??', fase || 'Mata-mata']
+    );
+    mataJogosCache = null;
+    broadcastState();
+    res.json({ ok: true, jogo: r.rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Admin: apagar usuário e seu player
 app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   const userId = parseInt(req.params.id);
