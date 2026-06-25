@@ -793,9 +793,9 @@ function renderPalpites() {
       <span style="font-size:11px;color:var(--text-muted)">${j.data} ${j.hora} · ${j.fase.replace('1ª Rodada — ','').replace('2ª Rodada — ','').replace('3ª Rodada — ','')}</span>${badge}</div>
       <div class="palpite-teams">
         <span class="palpite-team">${flag(j.time1,20)} ${j.time1}</span>
-        <input type="number" min="0" max="20" class="score-inp" value="${v1}" placeholder="–" ${bloq ? 'disabled' : ''} onchange="savePalpite(${p.id},${j.id},0,this.value)">
+        <input id="inp1_${j.id}" type="number" min="0" max="20" class="score-inp" value="${v1}" placeholder="–" ${bloq ? 'disabled' : ''} onchange="savePalpite(${p.id},${j.id},0,this.value)" oninput="${j.id>=73?`checkMataExtras(${j.id},this.value,document.getElementById('inp2_${j.id}').value)`:``}">
         <span class="score-vs">×</span>
-        <input type="number" min="0" max="20" class="score-inp" value="${v2}" placeholder="–" ${bloq ? 'disabled' : ''} onchange="savePalpite(${p.id},${j.id},1,this.value)">
+        <input id="inp2_${j.id}" type="number" min="0" max="20" class="score-inp" value="${v2}" placeholder="–" ${bloq ? 'disabled' : ''} onchange="savePalpite(${p.id},${j.id},1,this.value)" oninput="${j.id>=73?`checkMataExtras(${j.id},document.getElementById('inp1_${j.id}').value,this.value)`:``}">
         <span class="palpite-team right">${flag(j.time2,20)} ${j.time2}</span>
       </div>
       ${j.id >= 73 ? `<div style="margin-top:8px;padding:6px 10px;background:#fff0e0;border-radius:7px;font-size:11px;color:#92400e;line-height:1.5">⚠️ <b>Mata-mata:</b> só pontua quem acertar a seleção classificada. Errou quem avança = <b>0 pts</b>.</div>` : ''}
@@ -804,27 +804,43 @@ function renderPalpites() {
   el.innerHTML = h;
 }
 
-// Aposta extra do mata-mata: só aparece quando o palpite é empate num jogo de mata-mata
+// Aposta extra do mata-mata: só aparece quando o palpite é empate
 function mataExtras(j, pp, pid, bloq) {
-  if (j.id < 73 || !pp || pp.g1 !== pp.g2) return '';
+  if (j.id < 73) return '';
+  const isEmpate = pp && pp.g1 === pp.g2;
   if (bloq) {
+    if (!isEmpate) return '';
     const marcou = [];
     if (pp.penaltis) marcou.push('Pênaltis');
     if (pp.classificado) marcou.push('avança: ' + (pp.classificado === 1 ? j.time1 : j.time2));
     return `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);font-size:12px;color:var(--text-muted)">⚔️ Desempate: ${marcou.length ? marcou.join(' · ') : '(não apostou)'}</div>`;
   }
-  return `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:7px">⚔️ Empate! Aposte o desempate — <b>acerte quem se classifica pra valer o bônus</b></div>
+  return `<div id="mata_extra_${j.id}" style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);display:${isEmpate ? 'block' : 'none'}">
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:7px">⚔️ Empate! Escolha quem se classifica — <b>errar = 0 pts no jogo</b></div>
     <div style="display:flex;align-items:center;gap:8px;font-size:13px">
       <span>Quem se classifica?</span>
       <select id="ex_cl_${j.id}" onchange="saveExtras(${pid},${j.id})" style="padding:6px 10px;border-radius:8px;border:1.5px solid var(--border);font-family:'DM Sans',sans-serif;background:#f9fafb">
         <option value="">—</option>
-        <option value="1" ${pp.classificado === 1 ? 'selected' : ''}>${j.time1}</option>
-        <option value="2" ${pp.classificado === 2 ? 'selected' : ''}>${j.time2}</option>
+        <option value="1" ${pp && pp.classificado === 1 ? 'selected' : ''}>${j.time1}</option>
+        <option value="2" ${pp && pp.classificado === 2 ? 'selected' : ''}>${j.time2}</option>
       </select>
     </div>
-    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;margin-top:8px"><input type="checkbox" id="ex_pe_${j.id}" ${pp.penaltis ? 'checked' : ''} onchange="saveExtras(${pid},${j.id})"> Vai pra pênaltis?</label>
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;margin-top:8px"><input type="checkbox" id="ex_pe_${j.id}" ${pp && pp.penaltis ? 'checked' : ''} onchange="saveExtras(${pid},${j.id})"> Vai pra pênaltis?</label>
   </div>`;
+}
+
+// Mostra/esconde o bloco de extras ao vivo conforme o placar digitado
+function checkMataExtras(jogoId, g1Val, g2Val) {
+  const el = document.getElementById(`mata_extra_${jogoId}`);
+  if (!el) return;
+  const isEmpate = g1Val !== '' && g2Val !== '' && g1Val === g2Val;
+  el.style.display = isEmpate ? 'block' : 'none';
+  if (!isEmpate) {
+    const cl = document.getElementById(`ex_cl_${jogoId}`);
+    const pe = document.getElementById(`ex_pe_${jogoId}`);
+    if (cl) cl.value = '';
+    if (pe) pe.checked = false;
+  }
 }
 
 // Distribuição dos palpites: % vitória time1, empate, vitória time2
