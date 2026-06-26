@@ -412,9 +412,10 @@ app.post('/api/admin/mata-jogos', requireAdmin, async (req, res) => {
   const { time1, time2, data, hora, fase } = req.body;
   if (!time1 || !time2) return res.status(400).json({ error: 'time1 e time2 obrigatórios' });
   try {
+    const newId = (await pool.query(`SELECT nextval('mata_jogos_seq') AS id`)).rows[0].id;
     const r = await pool.query(
-      `INSERT INTO mata_jogos (time1, time2, data, hora, fase) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [time1, time2, data || '??/??', hora || '??:??', fase || 'Mata-mata']
+      `INSERT INTO mata_jogos (id, time1, time2, data, hora, fase) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [newId, time1, time2, data || '??/??', hora || '??:??', fase || 'Mata-mata']
     );
     mataJogosCache = null;
     broadcastState();
