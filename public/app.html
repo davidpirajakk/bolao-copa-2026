@@ -501,13 +501,14 @@ function scoreGame(p, r, jogo) {
   // Quem palpitou empate: deve escolher classificado (e opcionalmente pênaltis +1).
   // Errar quem avança = 0 pontos independente de prorrogação/pênaltis.
   let penaltisBonus = false;
+  let classificadoBonus = false;
   if (jogo && jogo.id >= 73 && r.classificado) {
     const pEmpate = p.g1 === p.g2;
     const pClassificado = pEmpate ? (p.classificado || null) : (p.g1 > p.g2 ? 1 : 2);
     if (!pClassificado || pClassificado !== r.classificado) {
       return { pts: 0, breakdown: [{ label: 'Errou o classificado', pts: 0, color: '#ef4444' }] };
     }
-    // Pênaltis: só quem palpitou empate pode marcar; +1 se acertou
+    classificadoBonus = true;
     if (pEmpate && p.penaltis && r.penalties) penaltisBonus = true;
   }
 
@@ -516,9 +517,12 @@ function scoreGame(p, r, jogo) {
   const pw = p.g1 > p.g2 ? 1 : p.g1 < p.g2 ? 2 : 0;
   const correctWinner = rw === pw;
 
+  // Acertou o classificado no mata-mata = +1 sempre
+  if (classificadoBonus) { pts += 1; breakdown.push({ label: 'Classificado certo', pts: 1, color: '#16a34a' }); }
+
   // Placar exato = 5 fixo (+2 goleada exata)
   if (exact) {
-    pts = 5; breakdown.push({ label: 'Placar exato', pts: 5, color: '#00a651' });
+    pts += 5; breakdown.push({ label: 'Placar exato', pts: 5, color: '#00a651' });
     if (Math.abs(r.g1 - r.g2) >= 3) { pts += 2; breakdown.push({ label: 'Goleada exata', pts: 2, color: '#f5a623' }); }
     if (penaltisBonus) { pts += 1; breakdown.push({ label: 'Pênaltis', pts: 1, color: '#546e7a' }); }
     return { pts, breakdown };
@@ -526,11 +530,9 @@ function scoreGame(p, r, jogo) {
   if (correctWinner) {
     pts += 3; breakdown.push({ label: 'Placar vencedor', pts: 3, color: '#1a56c4' });
   }
-  // Diferença de gols — só vale se também acertou o vencedor
   if (correctWinner && Math.abs(r.g1 - r.g2) === Math.abs(p.g1 - p.g2)) {
     pts += 1; breakdown.push({ label: 'Diferença de gols', pts: 1, color: '#0097a7' });
   }
-  // Gols — acertou o nº de gols de qualquer um dos times (posição certa)
   if (p.g1 === r.g1 || p.g2 === r.g2) {
     pts += 1; breakdown.push({ label: 'Gols de uma seleção', pts: 1, color: '#7b1fa2' });
   }
