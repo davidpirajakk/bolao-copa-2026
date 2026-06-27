@@ -418,8 +418,8 @@ app.post('/api/mata-jogos-seed', async (req, res) => {
       `INSERT INTO mata_jogos (id, espn_id, time1, time2, data, hora, fase) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
       [newId, 'manual_' + newId, time1, time2, data || '??/??', hora || '??:??', fase || 'Rodada de 32']
     );
-    mataJogosCache = null;
-    broadcastState();
+    Object.keys(mataJogosCache).forEach(k => delete mataJogosCache[k]);
+    broadcast();
     res.json({ ok: true, jogo: r.rows[0] });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -436,8 +436,8 @@ app.post('/api/admin/mata-jogos', requireAdmin, async (req, res) => {
       `INSERT INTO mata_jogos (id, time1, time2, data, hora, fase) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
       [newId, time1, time2, data || '??/??', hora || '??:??', fase || 'Mata-mata']
     );
-    mataJogosCache = null;
-    broadcastState();
+    Object.keys(mataJogosCache).forEach(k => delete mataJogosCache[k]);
+    broadcast();
     res.json({ ok: true, jogo: r.rows[0] });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -667,6 +667,12 @@ const JOGOS_MAP = Object.fromEntries(
            .map(j => [`${j.time1}|${j.time2}`, j.id])
 );
 
+// Conjunto das 48 seleções reais — usado para ignorar placeholders do ESPN
+// (ex: "Group I Winner", "Third Place Group A/B/C/D/F") até os times serem definidos
+const SELECOES = new Set(
+  JOGOS_DATA.flatMap(j => [j.time1, j.time2]).filter(t => t && t !== 'A definir')
+);
+
 async function doSync() {
   const apiKey = await getApiKey();
   if (!apiKey) return 0;
@@ -849,92 +855,94 @@ function faseMataMata(dateStr) {
 }
 
 async function syncEspn() {
-  const dts = [-1, 0, 1].map(off => new Date(Date.now() + off * 86400000).toISOString().slice(0, 10).replace(/-/g, ''));
+  // Uma única janela de ontem até a final: cobre os últimos jogos de grupo (placar ao vivo)
+  // e TODO o mata-mata, fazendo cada confronto aparecer assim que o ESPN definir as seleções.
+  const ontem = new Date(Date.now() - 86400000).toISOString().slice(0, 10).replace(/-/g, '');
+  const rangeFim = '20260719';
   let updated = 0;
 
-  // Carrega mata_jogos existentes indexados por espn_id
   const mataR = await pool.query('SELECT id, espn_id FROM mata_jogos');
   const mataByEspnId = Object.fromEntries(mataR.rows.map(r => [r.espn_id, r.id]));
 
-  for (const dt of dts) {
-    let data;
-    try {
-      const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${dt}`, { signal: AbortSignal.timeout(6000) });
-      if (!res.ok) continue;
-      data = await res.json();
-    } catch { continue; }
-    for (const ev of data.events || []) {
-      const comp = ev.competitions?.[0];
-      if (!comp) continue;
-      const espnId = String(ev.id || comp.id || '');
-      const state = comp.status?.type?.state; // pre / in / post
-      const homeC = (comp.competitors || []).find(c => c.homeAway === 'home');
-      const awayC = (comp.competitors || []).find(c => c.homeAway === 'away');
-      if (!homeC || !awayC) continue;
-      const hN = espnTeam(homeC.team?.displayName || homeC.team?.name);
-      const aN = espnTeam(awayC.team?.displayName || awayC.team?.name);
+  let data;
+  try {
+    const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${ontem}-${rangeFim}`, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return updated;
+    data = await res.json();
+  } catch { return updated; }
 
-      let jogoId = JOGOS_MAP[`${hN}|${aN}`], invert = false;
-      if (!jogoId) { jogoId = JOGOS_MAP[`${aN}|${hN}`]; invert = true; }
+  for (const ev of data.events || []) {
+    const comp = ev.competitions?.[0];
+    if (!comp) continue;
+    const espnId = String(ev.id || comp.id || '');
+    const state = comp.status?.type?.state; // pre / in / post
+    const homeC = (comp.competitors || []).find(c => c.homeAway === 'home');
+    const awayC = (comp.competitors || []).find(c => c.homeAway === 'away');
+    if (!homeC || !awayC) continue;
+    const hN = espnTeam(homeC.team?.displayName || homeC.team?.name);
+    const aN = espnTeam(awayC.team?.displayName || awayC.team?.name);
 
-      // Não encontrou no mapa estático — pode ser jogo do mata-mata
-      if (!jogoId) {
-        invert = false;
-        if (mataByEspnId[espnId]) {
-          jogoId = mataByEspnId[espnId];
-        } else if (espnId && dt >= '20260627') {
-          // Novo jogo de mata-mata detectado — verifica se já existe entrada manual com esses times
-          const gameDate = ev.date ? ev.date.slice(0, 10) : `${dt.slice(0,4)}-${dt.slice(4,6)}-${dt.slice(6,8)}`;
-          const fase = faseMataMata(gameDate);
-          const diaMes = `${parseInt(gameDate.slice(8,10))}/${['jan','fev','mar','abr','mai','jun','jul'][parseInt(gameDate.slice(5,7))-1]}`;
-          let hora = '—';
-          if (ev.date) {
-            const utcH = new Date(ev.date).getUTCHours();
-            const brtH = (utcH - 3 + 24) % 24;
-            hora = `${brtH}h`;
-          }
-          // Tenta vincular ao ESPN um jogo manual existente com os mesmos times
-          const existing = await pool.query(
-            `SELECT id FROM mata_jogos WHERE ((time1=$1 AND time2=$2) OR (time1=$2 AND time2=$1)) AND espn_id LIKE 'manual_%' LIMIT 1`,
-            [hN, aN]
-          );
-          if (existing.rows.length) {
-            jogoId = existing.rows[0].id;
-            await pool.query(`UPDATE mata_jogos SET espn_id=$1, data=$2, hora=$3, fase=$4 WHERE id=$5`, [espnId, diaMes, hora, fase, jogoId]);
-            mataByEspnId[espnId] = jogoId;
-          } else {
-            const newId = (await pool.query(`SELECT nextval('mata_jogos_seq') AS id`)).rows[0].id;
-            await pool.query(
-              'INSERT INTO mata_jogos (id, espn_id, fase, data, hora, time1, time2) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (espn_id) DO NOTHING',
-              [newId, espnId, fase, diaMes, hora, hN, aN]
-            );
-            jogoId = newId;
-            mataByEspnId[espnId] = newId;
-          }
-          delete mataJogosCache[jogoId];
-          updated++;
+    let jogoId = JOGOS_MAP[`${hN}|${aN}`], invert = false;
+    if (!jogoId) { jogoId = JOGOS_MAP[`${aN}|${hN}`]; invert = true; }
+
+    if (!jogoId) {
+      invert = false;
+      if (mataByEspnId[espnId]) {
+        jogoId = mataByEspnId[espnId];
+      } else if (espnId && SELECOES.has(hN) && SELECOES.has(aN)) {
+        // Confronto de mata-mata com as duas seleções já definidas — registra automaticamente.
+        // Placeholders ("Group I Winner", "Third Place...") não passam por SELECOES e são ignorados.
+        const gameDate = (ev.date || '').slice(0, 10);
+        if (gameDate < '2026-06-28') continue;
+        const fase = faseMataMata(gameDate);
+        const diaMes = `${parseInt(gameDate.slice(8,10))}/${['jan','fev','mar','abr','mai','jun','jul'][parseInt(gameDate.slice(5,7))-1]}`;
+        let hora = '—';
+        if (ev.date) {
+          const utcH = new Date(ev.date).getUTCHours();
+          const brtH = (utcH - 3 + 24) % 24;
+          hora = `${brtH}h`;
         }
-        if (!jogoId) continue;
+        // Vincula ao jogo manual existente com os mesmos times, se houver
+        const existing = await pool.query(
+          `SELECT id FROM mata_jogos WHERE ((time1=$1 AND time2=$2) OR (time1=$2 AND time2=$1)) AND espn_id LIKE 'manual_%' LIMIT 1`,
+          [hN, aN]
+        );
+        if (existing.rows.length) {
+          jogoId = existing.rows[0].id;
+          await pool.query(`UPDATE mata_jogos SET espn_id=$1, data=$2, hora=$3, fase=$4 WHERE id=$5`, [espnId, diaMes, hora, fase, jogoId]);
+          mataByEspnId[espnId] = jogoId;
+        } else {
+          const newId = (await pool.query(`SELECT nextval('mata_jogos_seq') AS id`)).rows[0].id;
+          await pool.query(
+            'INSERT INTO mata_jogos (id, espn_id, fase, data, hora, time1, time2) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (espn_id) DO NOTHING',
+            [newId, espnId, fase, diaMes, hora, hN, aN]
+          );
+          jogoId = newId;
+          mataByEspnId[espnId] = newId;
+        }
+        delete mataJogosCache[jogoId];
+        updated++;
       }
-
-      const status = state === 'in' ? 'IN_PLAY' : state === 'post' ? 'FINISHED' : 'TIMED';
-      await pool.query(
-        "INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2 WHERE live_status.status IS DISTINCT FROM 'FINISHED'",
-        [jogoId, status]
-      );
-      if (state === 'pre') continue;
-
-      let g1 = parseInt(homeC.score), g2 = parseInt(awayC.score);
-      if (invert) { const t = g1; g1 = g2; g2 = t; }
-      if (isNaN(g1) || isNaN(g2)) continue;
-      const r = await pool.query(
-        `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties, source) VALUES ($1, $2, $3, false, false, 'api')
-         ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, source = 'api'
-         WHERE resultados.source IS DISTINCT FROM 'manual' AND (resultados.g1 <> $2 OR resultados.g2 <> $3)`,
-        [jogoId, g1, g2]
-      );
-      if (r.rowCount) updated++;
+      if (!jogoId) continue;
     }
+
+    const status = state === 'in' ? 'IN_PLAY' : state === 'post' ? 'FINISHED' : 'TIMED';
+    await pool.query(
+      "INSERT INTO live_status (jogo_id, status) VALUES ($1, $2) ON CONFLICT (jogo_id) DO UPDATE SET status = $2 WHERE live_status.status IS DISTINCT FROM 'FINISHED'",
+      [jogoId, status]
+    );
+    if (state === 'pre') continue;
+
+    let g1 = parseInt(homeC.score), g2 = parseInt(awayC.score);
+    if (invert) { const t = g1; g1 = g2; g2 = t; }
+    if (isNaN(g1) || isNaN(g2)) continue;
+    const r = await pool.query(
+      `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties, source) VALUES ($1, $2, $3, false, false, 'api')
+       ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, source = 'api'
+       WHERE resultados.source IS DISTINCT FROM 'manual' AND (resultados.g1 <> $2 OR resultados.g2 <> $3)`,
+      [jogoId, g1, g2]
+    );
+    if (r.rowCount) updated++;
   }
   if (updated > 0) broadcast();
   return updated;
