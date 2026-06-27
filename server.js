@@ -895,7 +895,7 @@ async function syncEspn() {
           }
           // Tenta vincular ao ESPN um jogo manual existente com os mesmos times
           const existing = await pool.query(
-            `SELECT id FROM mata_jogos WHERE (time1=$1 AND time2=$2) OR (time1=$2 AND time2=$1) AND espn_id LIKE 'manual_%' LIMIT 1`,
+            `SELECT id FROM mata_jogos WHERE ((time1=$1 AND time2=$2) OR (time1=$2 AND time2=$1)) AND espn_id LIKE 'manual_%' LIMIT 1`,
             [hN, aN]
           );
           if (existing.rows.length) {
