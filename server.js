@@ -407,6 +407,25 @@ app.put('/api/admin/reset-senha/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// Rota direta para inserir mata-jogos via chave (uso no bash do Railway)
+app.post('/api/mata-jogos-seed', async (req, res) => {
+  const { key, time1, time2, data, hora, fase } = req.body;
+  if (key !== (process.env.SEED_KEY || 'bolao2026seed')) return res.status(403).json({ error: 'Chave inválida' });
+  if (!time1 || !time2) return res.status(400).json({ error: 'time1 e time2 obrigatórios' });
+  try {
+    const newId = (await pool.query(`SELECT nextval('mata_jogos_seq') AS id`)).rows[0].id;
+    const r = await pool.query(
+      `INSERT INTO mata_jogos (id, espn_id, time1, time2, data, hora, fase) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [newId, 'manual_' + newId, time1, time2, data || '??/??', hora || '??:??', fase || 'Rodada de 32']
+    );
+    mataJogosCache = null;
+    broadcastState();
+    res.json({ ok: true, jogo: r.rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Admin: criar jogo de mata-mata manualmente
 app.post('/api/admin/mata-jogos', requireAdmin, async (req, res) => {
   const { time1, time2, data, hora, fase } = req.body;
