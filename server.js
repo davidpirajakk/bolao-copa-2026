@@ -883,25 +883,35 @@ async function syncEspn() {
         if (mataByEspnId[espnId]) {
           jogoId = mataByEspnId[espnId];
         } else if (espnId && dt >= '20260627') {
-          // Novo jogo de mata-mata detectado — registra no banco
+          // Novo jogo de mata-mata detectado — verifica se já existe entrada manual com esses times
           const gameDate = ev.date ? ev.date.slice(0, 10) : `${dt.slice(0,4)}-${dt.slice(4,6)}-${dt.slice(6,8)}`;
           const fase = faseMataMata(gameDate);
           const diaMes = `${parseInt(gameDate.slice(8,10))}/${['jan','fev','mar','abr','mai','jun','jul'][parseInt(gameDate.slice(5,7))-1]}`;
-          // Hora em BRT (UTC-3): pega do ESPN ou usa '—'
           let hora = '—';
           if (ev.date) {
             const utcH = new Date(ev.date).getUTCHours();
             const brtH = (utcH - 3 + 24) % 24;
             hora = `${brtH}h`;
           }
-          const newId = (await pool.query(`SELECT nextval('mata_jogos_seq') AS id`)).rows[0].id;
-          await pool.query(
-            'INSERT INTO mata_jogos (id, espn_id, fase, data, hora, time1, time2) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (espn_id) DO NOTHING',
-            [newId, espnId, fase, diaMes, hora, hN, aN]
+          // Tenta vincular ao ESPN um jogo manual existente com os mesmos times
+          const existing = await pool.query(
+            `SELECT id FROM mata_jogos WHERE (time1=$1 AND time2=$2) OR (time1=$2 AND time2=$1) AND espn_id LIKE 'manual_%' LIMIT 1`,
+            [hN, aN]
           );
-          jogoId = newId;
-          mataByEspnId[espnId] = newId;
-          delete mataJogosCache[newId];
+          if (existing.rows.length) {
+            jogoId = existing.rows[0].id;
+            await pool.query(`UPDATE mata_jogos SET espn_id=$1, data=$2, hora=$3, fase=$4 WHERE id=$5`, [espnId, diaMes, hora, fase, jogoId]);
+            mataByEspnId[espnId] = jogoId;
+          } else {
+            const newId = (await pool.query(`SELECT nextval('mata_jogos_seq') AS id`)).rows[0].id;
+            await pool.query(
+              'INSERT INTO mata_jogos (id, espn_id, fase, data, hora, time1, time2) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (espn_id) DO NOTHING',
+              [newId, espnId, fase, diaMes, hora, hN, aN]
+            );
+            jogoId = newId;
+            mataByEspnId[espnId] = newId;
+          }
+          delete mataJogosCache[jogoId];
           updated++;
         }
         if (!jogoId) continue;
