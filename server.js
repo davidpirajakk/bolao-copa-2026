@@ -892,16 +892,14 @@ async function syncEspn() {
       } else if (espnId && SELECOES.has(hN) && SELECOES.has(aN)) {
         // Confronto de mata-mata com as duas seleções já definidas — registra automaticamente.
         // Placeholders ("Group I Winner", "Third Place...") não passam por SELECOES e são ignorados.
-        const gameDate = (ev.date || '').slice(0, 10);
+        if (!ev.date) continue;
+        const brt = new Date(new Date(ev.date).getTime() - 3 * 3600000); // horário de Brasília (UTC-3)
+        const gameDate = brt.toISOString().slice(0, 10);
         if (gameDate < '2026-06-28') continue;
         const fase = faseMataMata(gameDate);
-        const diaMes = `${parseInt(gameDate.slice(8,10))}/${['jan','fev','mar','abr','mai','jun','jul'][parseInt(gameDate.slice(5,7))-1]}`;
-        let hora = '—';
-        if (ev.date) {
-          const utcH = new Date(ev.date).getUTCHours();
-          const brtH = (utcH - 3 + 24) % 24;
-          hora = `${brtH}h`;
-        }
+        const diaMes = `${brt.getUTCDate()}/${['jan','fev','mar','abr','mai','jun','jul'][brt.getUTCMonth()]}`;
+        const mm = brt.getUTCMinutes();
+        const hora = `${brt.getUTCHours()}h${mm ? String(mm).padStart(2, '0') : ''}`;
         // Vincula ao jogo manual existente com os mesmos times, se houver
         const existing = await pool.query(
           `SELECT id FROM mata_jogos WHERE ((time1=$1 AND time2=$2) OR (time1=$2 AND time2=$1)) AND espn_id LIKE 'manual_%' LIMIT 1`,
