@@ -253,6 +253,7 @@ app.get('/', async (req, res) => {
 });
 
 app.get('/app', requireAuth, (req, res) => {
+  res.set('Cache-Control', 'no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'app.html'));
 });
 
