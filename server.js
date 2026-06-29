@@ -935,11 +935,23 @@ async function syncEspn() {
     let g1 = parseInt(homeC.score), g2 = parseInt(awayC.score);
     if (invert) { const t = g1; g1 = g2; g2 = t; }
     if (isNaN(g1) || isNaN(g2)) continue;
+
+    // Mata-mata: deduz do ESPN quem avançou e se foi pra pênaltis/prorrogação
+    let classificado = null, penalties = false, overtime = false;
+    if (jogoId >= 73 && state === 'post') {
+      const homeAdv = !!(homeC.winner || homeC.advance);
+      const awayAdv = !!(awayC.winner || awayC.advance);
+      if (homeAdv || awayAdv) classificado = invert ? (homeAdv ? 2 : 1) : (homeAdv ? 1 : 2);
+      const detail = `${comp.status?.type?.detail || ''} ${comp.status?.type?.shortDetail || ''}`;
+      penalties = homeC.shootoutScore != null || awayC.shootoutScore != null || /pen/i.test(detail);
+      overtime = penalties || /aet|extra/i.test(detail);
+    }
+
     const r = await pool.query(
-      `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties, source) VALUES ($1, $2, $3, false, false, 'api')
-       ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, source = 'api'
-       WHERE resultados.source IS DISTINCT FROM 'manual' AND (resultados.g1 <> $2 OR resultados.g2 <> $3)`,
-      [jogoId, g1, g2]
+      `INSERT INTO resultados (jogo_id, g1, g2, overtime, penalties, classificado, source) VALUES ($1, $2, $3, $4, $5, $6, 'api')
+       ON CONFLICT (jogo_id) DO UPDATE SET g1 = $2, g2 = $3, overtime = $4, penalties = $5, classificado = $6, source = 'api'
+       WHERE resultados.source IS DISTINCT FROM 'manual' AND (resultados.g1 <> $2 OR resultados.g2 <> $3 OR resultados.penalties IS DISTINCT FROM $5 OR resultados.classificado IS DISTINCT FROM $6)`,
+      [jogoId, g1, g2, overtime, penalties, classificado]
     );
     if (r.rowCount) updated++;
   }
