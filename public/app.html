@@ -502,14 +502,18 @@ function scoreGame(p, r, jogo) {
   // Errar quem avança = 0 pontos independente de prorrogação/pênaltis.
   let penaltisBonus = false;
   let classificadoBonus = false;
-  if (jogo && jogo.id >= 73 && r.classificado) {
-    const pEmpate = p.g1 === p.g2;
-    const pClassificado = pEmpate ? (p.classificado || null) : (p.g1 > p.g2 ? 1 : 2);
-    if (!pClassificado || pClassificado !== r.classificado) {
-      return { pts: 0, breakdown: [{ label: 'Errou o classificado', pts: 0, color: '#ef4444' }] };
+  if (jogo && jogo.id >= 73) {
+    // Quem avançou: o placar decide quando há vencedor; em empate (prorrogação/pênaltis) usa o classificado marcado
+    const rClass = r.g1 > r.g2 ? 1 : r.g1 < r.g2 ? 2 : (r.classificado || null);
+    if (rClass) {
+      const pEmpate = p.g1 === p.g2;
+      const pClassificado = pEmpate ? (p.classificado || null) : (p.g1 > p.g2 ? 1 : 2);
+      if (!pClassificado || pClassificado !== rClass) {
+        return { pts: 0, breakdown: [{ label: 'Errou o classificado', pts: 0, color: '#ef4444' }] };
+      }
+      classificadoBonus = true;
+      if (pEmpate && p.penaltis && r.penalties) penaltisBonus = true;
     }
-    classificadoBonus = true;
-    if (pEmpate && p.penaltis && r.penalties) penaltisBonus = true;
   }
 
   const exact = r.g1 === p.g1 && r.g2 === p.g2;
