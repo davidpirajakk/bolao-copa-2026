@@ -324,7 +324,7 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
       </div>
       <div class="rule-row" style="margin-top:6px">
         <div class="rule-pts" style="color:#546e7a">+1</div>
-        <div><div style="font-size:14px;font-weight:500">⚽ Pênaltis <span style="font-size:11px;color:var(--text-muted)">(só pra quem palpitar empate)</span></div><div class="rule-sub">Marcou que vai a pênaltis, foi a pênaltis <b>e</b> acertou quem avançou</div></div>
+        <div><div style="font-size:14px;font-weight:500">⚽ Como será definido <span style="font-size:11px;color:var(--text-muted)">(só pra quem palpitar empate)</span></div><div class="rule-sub">Acertou se o jogo terminou em <b>prorrogação</b> ou <b>pênaltis</b> (precisa ter acertado quem avançou)</div></div>
       </div>
       <div style="background:#f4f4f0;border-radius:8px;padding:10px 12px;margin-top:12px;font-size:12px;color:var(--text-muted);line-height:1.7">
         <b style="color:var(--text)">Exemplo:</b> você palpita 2 × 1 e sai 3 × 1 →
@@ -500,7 +500,7 @@ function scoreGame(p, r, jogo) {
   // Quem palpitou resultado (não empate): o vencedor do palpite deve avançar.
   // Quem palpitou empate: deve escolher classificado (e opcionalmente pênaltis +1).
   // Errar quem avança = 0 pontos independente de prorrogação/pênaltis.
-  let penaltisBonus = false;
+  let desempateBonus = false;
   let classificadoBonus = false;
   if (jogo && jogo.id >= 73) {
     // Quem avançou: o placar decide quando há vencedor; em empate (prorrogação/pênaltis) usa o classificado marcado
@@ -512,7 +512,11 @@ function scoreGame(p, r, jogo) {
         return { pts: 0, breakdown: [{ label: 'Errou o classificado', pts: 0, color: '#ef4444' }] };
       }
       classificadoBonus = true;
-      if (pEmpate && p.penaltis && r.penalties) penaltisBonus = true;
+      // Acertou como o jogo foi definido (pênaltis ou prorrogação) = +1
+      if (pEmpate) {
+        if (p.penaltis && r.penalties) desempateBonus = true;
+        else if (p.prorrogacao && r.overtime && !r.penalties) desempateBonus = true;
+      }
     }
   }
 
@@ -528,7 +532,7 @@ function scoreGame(p, r, jogo) {
   if (exact) {
     pts += 5; breakdown.push({ label: 'Placar exato', pts: 5, color: '#00a651' });
     if (Math.abs(r.g1 - r.g2) >= 3) { pts += 2; breakdown.push({ label: 'Goleada exata', pts: 2, color: '#f5a623' }); }
-    if (penaltisBonus) { pts += 1; breakdown.push({ label: 'Pênaltis', pts: 1, color: '#546e7a' }); }
+    if (desempateBonus) { pts += 1; breakdown.push({ label: 'Desempate certo', pts: 1, color: '#546e7a' }); }
     return { pts, breakdown };
   }
   if (correctWinner) {
@@ -543,7 +547,7 @@ function scoreGame(p, r, jogo) {
   if (Math.abs(r.g1 - r.g2) >= 3 && Math.abs(p.g1 - p.g2) >= 3) {
     pts += 1; breakdown.push({ label: 'Goleada', pts: 1, color: '#f5a623' });
   }
-  if (penaltisBonus) { pts += 1; breakdown.push({ label: 'Pênaltis', pts: 1, color: '#546e7a' }); }
+  if (desempateBonus) { pts += 1; breakdown.push({ label: 'Desempate certo', pts: 1, color: '#546e7a' }); }
   return { pts, breakdown };
 }
 
@@ -831,8 +835,9 @@ function mataExtras(j, pp, pid, bloq) {
   if (bloq) {
     if (!isEmpate) return '';
     const marcou = [];
-    if (pp.penaltis) marcou.push('Pênaltis');
     if (pp.classificado) marcou.push('avança: ' + (pp.classificado === 1 ? j.time1 : j.time2));
+    if (pp.penaltis) marcou.push('Pênaltis');
+    else if (pp.prorrogacao) marcou.push('Prorrogação');
     return `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);font-size:12px;color:var(--text-muted)">⚔️ Desempate: ${marcou.length ? marcou.join(' · ') : '(não apostou)'}</div>`;
   }
   return `<div id="mata_extra_${j.id}" style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);display:${isEmpate ? 'block' : 'none'}">
@@ -845,7 +850,15 @@ function mataExtras(j, pp, pid, bloq) {
         <option value="2" ${pp && pp.classificado === 2 ? 'selected' : ''}>${j.time2}</option>
       </select>
     </div>
-    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;margin-top:8px"><input type="checkbox" id="ex_pe_${j.id}" ${pp && pp.penaltis ? 'checked' : ''} onchange="saveExtras(${pid},${j.id})"> Vai pra pênaltis?</label>
+    <div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:8px">
+      <span>Será definido em?</span>
+      <select id="ex_de_${j.id}" onchange="saveExtras(${pid},${j.id})" style="padding:6px 10px;border-radius:8px;border:1.5px solid var(--border);font-family:'DM Sans',sans-serif;background:#f9fafb">
+        <option value="">—</option>
+        <option value="prorro" ${pp && pp.prorrogacao ? 'selected' : ''}>Prorrogação</option>
+        <option value="pen" ${pp && pp.penaltis ? 'selected' : ''}>Pênaltis</option>
+      </select>
+      <span style="font-size:11px;color:var(--text-muted)">(acertar = +1)</span>
+    </div>
   </div>`;
 }
 
@@ -857,9 +870,9 @@ function checkMataExtras(jogoId, g1Val, g2Val) {
   el.style.display = isEmpate ? 'block' : 'none';
   if (!isEmpate) {
     const cl = document.getElementById(`ex_cl_${jogoId}`);
-    const pe = document.getElementById(`ex_pe_${jogoId}`);
+    const de = document.getElementById(`ex_de_${jogoId}`);
     if (cl) cl.value = '';
-    if (pe) pe.checked = false;
+    if (de) de.value = '';
   }
 }
 
@@ -922,7 +935,8 @@ function classificadoChip(pal, j) {
   const c = pal.g1 > pal.g2 ? 1 : pal.g1 < pal.g2 ? 2 : (pal.classificado || null);
   if (!c) return `<span style="font-size:10px;color:#b45309;background:#fff0e0;padding:2px 6px;border-radius:5px;white-space:nowrap">avança: —</span>`;
   const t = c === 1 ? j.time1 : j.time2;
-  return `<span style="font-size:10px;color:#16a34a;background:#e9f9ef;padding:2px 6px;border-radius:5px;white-space:nowrap">➡️ ${t}${pal.penaltis ? ' · pên' : ''}</span>`;
+  const metodo = pal.penaltis ? ' · pên' : pal.prorrogacao ? ' · prorrog' : '';
+  return `<span style="font-size:10px;color:#16a34a;background:#e9f9ef;padding:2px 6px;border-radius:5px;white-space:nowrap">➡️ ${t}${metodo}</span>`;
 }
 
 // Lista dos palpites de todos (sem pontos) — usada quando o jogo travou mas ainda não acabou
@@ -1068,8 +1082,13 @@ function renderAdmin() {
           : `<button onclick="finalizarJogo(${j.id},true)" style="background:none;border:1px solid var(--green-mid);color:var(--green-dark);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;font-weight:600">🏁 Finalizar jogo</button>`}
       </div>
       ${isKnockout ? `<div style="display:flex;gap:16px;margin-top:10px;font-size:13px;color:var(--text-muted);flex-wrap:wrap;align-items:center">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="adm_${j.id}_pen" ${chkPen}> Foi pra pênaltis</label>
+        <label style="display:flex;align-items:center;gap:6px">Definido em:
+          <select id="adm_${j.id}_de" style="padding:5px 8px;border-radius:8px;border:1.5px solid var(--border);font-family:'DM Sans',sans-serif">
+            <option value="">tempo normal</option>
+            <option value="prorro" ${chkOT && !chkPen ? 'selected' : ''}>Prorrogação</option>
+            <option value="pen" ${chkPen ? 'selected' : ''}>Pênaltis</option>
+          </select>
+        </label>
         <label style="display:flex;align-items:center;gap:6px">Quem avançou:
           <select id="adm_${j.id}_cl" style="padding:5px 8px;border-radius:8px;border:1.5px solid var(--border);font-family:'DM Sans',sans-serif">
             <option value="">—</option>
@@ -1085,11 +1104,13 @@ function renderAdmin() {
 
 // ===== ACTIONS =====
 function lerExtras(jid) {
-  const pe = document.getElementById('ex_pe_' + jid);
+  const de = document.getElementById('ex_de_' + jid);
   const cl = document.getElementById('ex_cl_' + jid);
-  if (!pe && !cl) return {};
+  if (!de && !cl) return {};
+  const v = de?.value || '';
   return {
-    penaltis: pe?.checked || false,
+    penaltis: v === 'pen',
+    prorrogacao: v === 'prorro',
     classificado: parseInt(cl?.value) || null
   };
 }
@@ -1134,13 +1155,13 @@ async function saveResult(jid) {
   const g1 = parseInt(document.getElementById(`adm_${jid}_0`).value);
   const g2 = parseInt(document.getElementById(`adm_${jid}_1`).value);
   if (isNaN(g1) || isNaN(g2)) { alert('Insira os dois placares.'); return; }
-  const otEl = document.getElementById(`adm_${jid}_ot`);
-  const penEl = document.getElementById(`adm_${jid}_pen`);
+  const deEl = document.getElementById(`adm_${jid}_de`);
   const clEl = document.getElementById(`adm_${jid}_cl`);
+  const de = deEl?.value || '';
   await fetch(`/api/results/${jid}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ g1, g2, overtime: otEl?.checked || false, penalties: penEl?.checked || false, classificado: parseInt(clEl?.value) || null })
+    body: JSON.stringify({ g1, g2, overtime: de === 'prorro' || de === 'pen', penalties: de === 'pen', classificado: parseInt(clEl?.value) || null })
   });
 }
 
