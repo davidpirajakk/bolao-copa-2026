@@ -509,6 +509,10 @@ function scoreGame(p, r, jogo) {
       const pEmpate = p.g1 === p.g2;
       const pClassificado = pEmpate ? (p.classificado || null) : (p.g1 > p.g2 ? 1 : 2);
       if (!pClassificado || pClassificado !== rClass) {
+        // Exceção: acertou o empate EXATO (mesmo placar de empate do resultado) mas errou o classificado → 1 ponto
+        if (r.g1 === r.g2 && p.g1 === r.g1 && p.g2 === r.g2) {
+          return { pts: 1, breakdown: [{ label: 'Empate exato (errou o classificado)', pts: 1, color: '#0097a7' }] };
+        }
         return { pts: 0, breakdown: [{ label: 'Errou o classificado', pts: 0, color: '#ef4444' }] };
       }
       classificadoBonus = true;
