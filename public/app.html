@@ -883,10 +883,29 @@ function statBars(j) {
     `<div class="stat-row"><span class="stat-lbl">${lbl}</span>
       <div class="stat-bar"><div class="stat-bar-fill" style="width:${pct}%;background:${color}"></div></div>
       <span class="stat-pct" style="color:${color}">${pct}%</span></div>`;
-  return `<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">👀 Palpites da galera — ${total} apostaram</div>`
+  let out = `<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">👀 Palpites da galera — ${total} apostaram</div>`
     + row(`${flag(j.time1, 16)} ${j.time1}`, pa, 'var(--green-dark)')
     + row(`🤝 Empate`, pe, '#9ca3af')
     + row(`${flag(j.time2, 16)} ${j.time2}`, pb, '#1a56c4');
+  // Mata-mata: % de quem cada um acha que se classifica
+  if (j.id >= 73) {
+    let c1 = 0, c2 = 0, sem = 0, tot = 0;
+    for (const pid in state.palpites) {
+      const p = state.palpites[pid][j.id];
+      if (!p) continue;
+      tot++;
+      const c = p.g1 > p.g2 ? 1 : p.g1 < p.g2 ? 2 : (p.classificado || null);
+      if (c === 1) c1++; else if (c === 2) c2++; else sem++;
+    }
+    if (tot) {
+      const p1 = Math.round(c1 / tot * 100), p2 = Math.round(c2 / tot * 100), ps = Math.round(sem / tot * 100);
+      out += `<div style="font-size:11px;color:var(--text-muted);margin:14px 0 8px;border-top:1px dashed var(--border);padding-top:12px">➡️ Quem se classifica — na visão da galera</div>`
+        + row(`${flag(j.time1, 16)} ${j.time1}`, p1, '#16a34a')
+        + row(`${flag(j.time2, 16)} ${j.time2}`, p2, '#1a56c4')
+        + (sem ? row(`🤷 Não escolheu`, ps, '#9ca3af') : '');
+    }
+  }
+  return out;
 }
 
 // Lista de palpites + pontos de cada um (após o jogo encerrar).
