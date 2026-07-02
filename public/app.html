@@ -1120,15 +1120,16 @@ function lerExtras(jid) {
 }
 
 async function savePalpite(pid, jid, slot, val) {
-  const pal = (state.palpites[pid] || {})[jid] || { g1: 0, g2: 0 };
   const n = parseInt(val);
   if (isNaN(n) || n < 0) return;
-  const update = { g1: pal.g1 ?? 0, g2: pal.g2 ?? 0, ...lerExtras(jid) };
-  if (slot === 0) update.g1 = n; else update.g2 = n;
+  const inp1 = document.getElementById(`inp1_${jid}`);
+  const inp2 = document.getElementById(`inp2_${jid}`);
+  const g1 = slot === 0 ? n : (parseInt(inp1?.value) ?? 0);
+  const g2 = slot === 1 ? n : (parseInt(inp2?.value) ?? 0);
   await fetch(`/api/palpites/${pid}/${jid}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(update)
+    body: JSON.stringify({ g1, g2, ...lerExtras(jid) })
   });
 }
 
